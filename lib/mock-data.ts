@@ -11,3 +11,88 @@ export function detail(id:string): CentreDetail { const c=centres.find(x=>x.id==
 export const attendance: AttendanceRecord[] = Array.from({length:7},(_,i)=>({day:['Wed','Thu','Fri','Sat','Sun','Mon','Tue'][i],batch:'All active batches',reported:248+i*3,observed:239-i*2,variance:9+i*5}))
 export const summary: DashboardSummary = {centres,cases,attendanceTrend:attendance.map(x=>({day:x.day,discrepancies:x.variance})),severity:[{name:'Critical',value:3,fill:'#dc5a5a'},{name:'High',value:8,fill:'#d89838'},{name:'Medium',value:11,fill:'#6d86b5'},{name:'Low',value:6,fill:'#7da7a1'}],totals:{activeCentres:12,camerasHealthy:24,camerasTotal:30,activeBatches:18,openCases:22,criticalAlerts:3,offlineCentres:2}}
 export { cameras, batches, inventory }
+
+// ── Biometric-to-Video Attendance Reconciliation mock data ──
+import type { AttendanceReconciliation, BiometricDevice, BiometricEvent, VideoAnalysisJob, ReconciliationStatus } from './types'
+
+const reconStatuses: { status: ReconciliationStatus; expected: number; observed: number; quality: number; confidence: number; stability: number; occlusion: 'low'|'medium'|'high'; reason: string }[] = [
+  { status: 'NO_DEFICIT_DETECTED', expected: 20, observed: 19.5, quality: 0.94, confidence: 0.92, stability: 0.95, occlusion: 'low', reason: 'Video occupancy matches biometric attendance within normal variance.' },
+  { status: 'NO_DEFICIT_DETECTED', expected: 15, observed: 15, quality: 0.91, confidence: 0.89, stability: 0.93, occlusion: 'low', reason: 'Observed aggregate matches biometric check-in count exactly.' },
+  { status: 'WITHIN_CAMERA_TOLERANCE', expected: 13, observed: 12, quality: 0.88, confidence: 0.85, stability: 0.88, occlusion: 'low', reason: 'Minor difference of 1 is within expected camera tolerance.' },
+  { status: 'WITHIN_CAMERA_TOLERANCE', expected: 22, observed: 20, quality: 0.86, confidence: 0.82, stability: 0.84, occlusion: 'low', reason: 'Difference of 2 is within the ±15% camera tolerance band for this room size.' },
+  { status: 'UNVERIFIABLE', expected: 13, observed: 10.5, quality: 0.62, confidence: 0.44, stability: 0.55, occlusion: 'high', reason: 'High occlusion due to crowded classroom layout. Detection confidence too low for a reliable comparison.' },
+  { status: 'UNVERIFIABLE', expected: 18, observed: 14, quality: 0.58, confidence: 0.39, stability: 0.48, occlusion: 'high', reason: 'Multiple obstructions in camera field-of-view. Aggregate count unreliable.' },
+  { status: 'CAMERA_UNHEALTHY', expected: 16, observed: 0, quality: 0.08, confidence: 0, stability: 0, occlusion: 'low', reason: 'Camera CAM-012 is offline. No video signal available for occupancy estimation.' },
+  { status: 'CAMERA_UNHEALTHY', expected: 14, observed: 0, quality: 0.12, confidence: 0, stability: 0, occlusion: 'low', reason: 'Camera feed is frozen since 14:20. Edge device reports storage failure.' },
+  { status: 'REVIEW_REQUIRED', expected: 20, observed: 7, quality: 0.91, confidence: 0.88, stability: 0.9, occlusion: 'low', reason: 'Observed occupancy (7) is significantly below biometric expected (20). High-confidence video signal suggests a substantive gap requiring human review.' },
+  { status: 'REVIEW_REQUIRED', expected: 25, observed: 11, quality: 0.89, confidence: 0.86, stability: 0.87, occlusion: 'low', reason: 'Only 11 occupants detected against 25 biometric check-ins. Camera quality and confidence are high.' },
+  { status: 'REVIEW_REQUIRED', expected: 18, observed: 5, quality: 0.93, confidence: 0.91, stability: 0.92, occlusion: 'low', reason: 'Major discrepancy: 5 observed vs 18 expected. Detection metrics are reliable.' },
+  { status: 'CONFIRMED_BY_REVIEWER', expected: 22, observed: 8, quality: 0.9, confidence: 0.87, stability: 0.89, occlusion: 'low', reason: 'Confirmed discrepancy after field inspection by district inspector.' },
+  { status: 'DISMISSED_BY_REVIEWER', expected: 19, observed: 12, quality: 0.85, confidence: 0.82, stability: 0.79, occlusion: 'medium', reason: 'Reviewer noted that trainees were in adjacent practical workshop during observation window.' },
+  { status: 'NO_DEFICIT_DETECTED', expected: 24, observed: 23, quality: 0.92, confidence: 0.9, stability: 0.94, occlusion: 'low', reason: 'Aggregate occupancy consistent with biometric records.' },
+  { status: 'WITHIN_CAMERA_TOLERANCE', expected: 17, observed: 15, quality: 0.87, confidence: 0.83, stability: 0.86, occlusion: 'medium', reason: 'Difference of 2 with medium occlusion is within acceptable range.' },
+]
+
+export const reconciliations: AttendanceReconciliation[] = reconStatuses.map((r, i) => {
+  const c = centres[i % centres.length]
+  const batchIdx = i % 6
+  return {
+    id: `REC-${String(3001 + i).padStart(4, '0')}`,
+    centreId: c.id,
+    centreName: c.name,
+    batchId: `BAT-${batchIdx + 1}`,
+    batchName: `Batch ${String(batchIdx + 1).padStart(2, '0')} · ${['Electrical', 'Fitter', 'Welding'][i % 3]}`,
+    roomName: `Workshop ${(i % 3) + 1}`,
+    observedAt: `2026-10-${String(7 - (i % 5)).padStart(2, '0')}T${String(9 + (i % 6)).padStart(2, '0')}:${String(15 + (i % 4) * 10).padStart(2, '0')}:00Z`,
+    expectedPresent: r.expected,
+    biometricCheckIns: r.expected + Math.floor(i % 3),
+    biometricCheckOuts: Math.floor(i % 3),
+    observedMedian: r.observed,
+    cameraQualityScore: r.quality,
+    detectionConfidence: r.confidence,
+    countStability: r.stability,
+    occlusionRisk: r.occlusion,
+    status: r.status,
+    reason: r.reason,
+    evidence: [
+      { type: 'snapshot' as const, url: '/placeholder.jpg', capturedAt: `2026-10-${String(7 - (i % 5)).padStart(2, '0')}T${String(9 + (i % 6)).padStart(2, '0')}:15:00Z` },
+      { type: 'clip' as const, url: '/placeholder.jpg', capturedAt: `2026-10-${String(7 - (i % 5)).padStart(2, '0')}T${String(9 + (i % 6)).padStart(2, '0')}:20:00Z` },
+    ],
+    reviewer: r.status === 'CONFIRMED_BY_REVIEWER'
+      ? { name: 'A. Sharma', decision: 'CONFIRMED' as const, note: 'Confirmed after on-site inspection. Centre operator acknowledged gap.', decidedAt: '2026-10-08T14:30:00Z' }
+      : r.status === 'DISMISSED_BY_REVIEWER'
+      ? { name: 'M. Iyer', decision: 'DISMISSED' as const, note: 'Trainees were in adjacent workshop for practical session — attendance valid.', decidedAt: '2026-10-08T11:15:00Z' }
+      : undefined,
+    state: c.state,
+    district: c.district,
+  }
+})
+
+const deviceSources = ['AEBAS', 'RFID', 'FINGERPRINT_VENDOR', 'DEMO'] as const
+export const biometricDevices: BiometricDevice[] = centres.map((c, i) => ({
+  id: `BIO-${String(i + 1).padStart(3, '0')}`,
+  centreId: c.id,
+  centreName: c.name,
+  source: deviceSources[i % 4],
+  lastSuccessfulSync: i === 5 ? '2026-10-07T06:40:00Z' : i === 8 ? '2026-10-06T22:10:00Z' : '2026-10-09T10:05:00Z',
+  delayedEvents: i === 5 ? 14 : i === 8 ? 23 : i % 4 === 0 ? 2 : 0,
+  offlineEvents: i === 8 ? 8 : 0,
+  health: (i === 8 ? 'offline' : i === 5 ? 'delayed' : 'healthy') as 'healthy' | 'delayed' | 'offline',
+  state: c.state,
+  district: c.district,
+}))
+
+const tokenRefs = ['TRN-•••A91', 'TRN-•••B42', 'TRN-•••C73', 'TRN-•••D18', 'TRN-•••E56', 'TRN-•••F29', 'TRN-•••G84', 'TRN-•••H05', 'TRN-•••J37', 'TRN-•••K62']
+export const biometricEvents: BiometricEvent[] = tokenRefs.flatMap((ref, i) => {
+  const c = centres[i % centres.length]
+  return [
+    { id: `EVT-${2 * i + 1}`, tokenisedTraineeRef: ref, source: deviceSources[i % 4], deviceId: `BIO-${String((i % 12) + 1).padStart(3, '0')}`, eventType: 'CHECK_IN' as const, timestamp: `2026-10-07T09:0${i % 6}:00Z`, centreId: c.id, batchId: `BAT-${(i % 6) + 1}`, syncStatus: 'synced' as const, createdAt: '2026-10-07T09:00:00Z' },
+    { id: `EVT-${2 * i + 2}`, tokenisedTraineeRef: ref, source: deviceSources[i % 4], deviceId: `BIO-${String((i % 12) + 1).padStart(3, '0')}`, eventType: 'CHECK_OUT' as const, timestamp: `2026-10-07T13:0${i % 6}:00Z`, centreId: c.id, batchId: `BAT-${(i % 6) + 1}`, syncStatus: 'synced' as const, createdAt: '2026-10-07T13:00:00Z' },
+  ]
+})
+
+export const videoJobs: VideoAnalysisJob[] = [
+  { id: 'VJ-001', centreId: 'CTR-001', batchId: 'BAT-1', videoRef: 's3://skillguard-video/ctr001-bat1-20261007.mp4', status: 'COMPLETED', result: { observedMedian: 19.5, detectionConfidence: 0.92, countStability: 0.95, occlusionRisk: 'low' }, submittedAt: '2026-10-07T09:25:00Z', completedAt: '2026-10-07T09:27:00Z' },
+  { id: 'VJ-002', centreId: 'CTR-003', batchId: 'BAT-3', videoRef: 's3://skillguard-video/ctr003-bat3-20261007.mp4', status: 'PROCESSING', submittedAt: '2026-10-07T10:30:00Z' },
+  { id: 'VJ-003', centreId: 'CTR-009', batchId: 'BAT-2', videoRef: 's3://skillguard-video/ctr009-bat2-20261007.mp4', status: 'FAILED', submittedAt: '2026-10-07T11:00:00Z' },
+]

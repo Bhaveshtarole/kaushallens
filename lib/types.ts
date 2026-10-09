@@ -17,3 +17,76 @@ export type CaseReview = { id:string; action:string; actor:string; at:string; no
 export type Room = { id:string; name:string; area:number }
 export type EdgeDevice = { id:string; version:string; storage:number; status:string }
 export type Observation = { id:string; value:number; quality:string; at:string }
+
+// ── Biometric-to-Video Attendance Reconciliation ──
+export type ReconciliationStatus =
+  | 'NO_DEFICIT_DETECTED'
+  | 'WITHIN_CAMERA_TOLERANCE'
+  | 'UNVERIFIABLE'
+  | 'CAMERA_UNHEALTHY'
+  | 'REVIEW_REQUIRED'
+  | 'CONFIRMED_BY_REVIEWER'
+  | 'DISMISSED_BY_REVIEWER'
+
+export type ReconciliationComplianceStatus = ReconciliationStatus
+
+export type AttendanceReconciliation = {
+  id: string
+  centreId: string
+  centreName: string
+  batchId: string
+  batchName: string
+  roomName: string
+  observedAt: string
+  expectedPresent: number
+  biometricCheckIns: number
+  biometricCheckOuts: number
+  observedMedian: number
+  cameraQualityScore: number
+  detectionConfidence: number
+  countStability: number
+  occlusionRisk: 'low' | 'medium' | 'high'
+  status: ReconciliationStatus
+  reason: string
+  evidence: { type: 'snapshot' | 'clip'; url: string; capturedAt: string }[]
+  reviewer?: { name: string; decision: 'CONFIRMED' | 'DISMISSED'; note: string; decidedAt: string }
+  state: string
+  district: string
+}
+
+export type BiometricDevice = {
+  id: string
+  centreId: string
+  centreName: string
+  source: 'AEBAS' | 'RFID' | 'FINGERPRINT_VENDOR' | 'DEMO'
+  lastSuccessfulSync: string
+  delayedEvents: number
+  offlineEvents: number
+  health: 'healthy' | 'delayed' | 'offline'
+  state: string
+  district: string
+}
+
+export type BiometricEvent = {
+  id: string
+  tokenisedTraineeRef: string
+  source: 'AEBAS' | 'RFID' | 'FINGERPRINT_VENDOR' | 'DEMO'
+  deviceId: string
+  eventType: 'CHECK_IN' | 'CHECK_OUT'
+  timestamp: string
+  centreId: string
+  batchId: string
+  syncStatus: 'synced' | 'pending' | 'failed'
+  createdAt: string
+}
+
+export type VideoAnalysisJob = {
+  id: string
+  centreId: string
+  batchId: string
+  videoRef: string
+  status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  result?: { observedMedian: number; detectionConfidence: number; countStability: number; occlusionRisk: 'low' | 'medium' | 'high' }
+  submittedAt: string
+  completedAt?: string
+}
