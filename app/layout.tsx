@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'SkillGuard Command Centre',
-  description: 'Privacy-preserving compliance monitoring for vocational training centres.',
+  title: 'KaushalLens — AI-Powered Skill Centre Monitoring & Compliance Portal',
+  description: 'KaushalLens — AI-powered skill centre monitoring and compliance for MSDE operations.',
   generator: 'v0.app',
   icons: {
     icon: [
