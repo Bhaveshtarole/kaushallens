@@ -1,0 +1,1 @@
+"""SkillGuard local inference service."""
