@@ -1,15 +1,64 @@
 import type { Centre, ComplianceCase, DashboardSummary, CentreDetail, AttendanceRecord, InventoryItem, Camera, Batch } from './types'
 const states = [['Maharashtra','Pune'],['Maharashtra','Nashik'],['Uttar Pradesh','Lucknow'],['Uttar Pradesh','Varanasi'],['Karnataka','Bengaluru'],['Karnataka','Mysuru'],['Rajasthan','Jaipur'],['Rajasthan','Kota'],['Assam','Guwahati'],['Tamil Nadu','Chennai'],['Tamil Nadu','Madurai'],['Maharashtra','Nagpur']]
-export const centres: Centre[] = states.map(([state,district],i)=>({id:`CTR-${String(i+1).padStart(3,'0')}`,name:`${district} Skill Development Centre`,state,district,status:i===2?'Potential discrepancy':i===5?'Camera unhealthy':i===8?'Unverifiable':'Compliant',score:[94,88,71,82,97,64,91,86,58,93,89,78][i],openCases:[1,2,4,2,0,5,1,2,6,0,1,3][i],camerasHealthy:[3,2,2,3,3,1,2,3,1,3,3,2][i],camerasTotal:3,lastSync:i===5?'38 min ago':'3 min ago',risk:i===8?'High':i===5?'High':i===2?'Medium':'Low'}))
+export const centres: Centre[] = states.map(([state,district],i)=>({
+  id:`CTR-${String(i+1).padStart(3,'0')}`,
+  name:`${district} Skill Development Centre`,
+  state,
+  district,
+  status:(i===0?'Compliant':i===1?'Compliant':i===2?'Needs Review':i===5?'Camera Issue':i===8?'Unverifiable':'Compliant') as any,
+  score:[94,88,71,82,97,64,91,86,58,93,89,78][i],
+  attendanceMatch:[94,88,71,84,95,64,89,83,55,91,87,76][i],
+  infrastructureScore:[92,85,68,80,94,70,88,84,62,90,86,77][i],
+  openCases:[1,2,4,2,0,5,1,2,6,0,1,3][i],
+  camerasHealthy:[3,2,2,3,3,1,2,3,1,3,3,2][i],
+  camerasTotal:3,
+  lastSync:i===5?'38 min ago':'3 min ago',
+  risk:i===8?'High':i===5?'High':i===2?'Medium':'Low'
+}))
 const categories=['attendance','infrastructure','camera_health','connectivity'] as const
-const titles=['Attendance variance detected','Missing workbench observation','Camera obstruction detected','Low-light evidence — unverifiable','Edge device offline','Repeated infrastructure gap','Attendance verified — no action']
-export const cases: ComplianceCase[] = Array.from({length:28},(_,i)=>{const c=centres[i%centres.length]; const cat=categories[i%4]; const severity: any=i%9===0?'critical':i%3===0?'high':i%2===0?'medium':'low'; return {id:`CASE-${String(2401+i)}`,title:titles[i%titles.length],category:cat,severity,status:i%8===0?'resolved':i%7===0?'under_review':'open',centreId:c.id,centreName:c.name,state:c.state,district:c.district,roomName:`Workshop ${i%3+1}`,batchName:`Batch ${String(i%6+1).padStart(2,'0')} · ${['Electrical','Fitter','Welding'][i%3]}`,expectedValue:cat==='attendance'?24:cat==='infrastructure'?4:undefined,observedValue:cat==='attendance'?18+i%8:cat==='infrastructure'?3:undefined,confidence:i%5===0?0.42:0.84,evidenceQuality:i%5===0?'low':'high',triggerReason:cat==='attendance'?'Observed occupancy remained below reported attendance for 3 consecutive windows.':cat==='infrastructure'?'Visual observation indicates a possible gap against sanctioned inventory.':'Device telemetry or frame quality crossed the review threshold.',createdAt:`2026-10-${String(7-i%7).padStart(2,'0')}T${String(9+i%8).padStart(2,'0')}:20:00Z`,updatedAt:'2026-10-07T10:20:00Z',assignedTo:i%3===0?'A. Sharma':undefined,slaDueAt:'2026-10-08T18:00:00Z',evidenceIds:[`EV-${i+1}`]}})
+const titles=['Missing workbench observation','Camera obstruction detected','Low-light evidence needs review','Attendance variance detected','Edge device offline','Repeated infrastructure gap','Attendance verified — no action']
+export const cases: ComplianceCase[] = Array.from({length:28},(_,i)=>{
+  const c=i===0?centres[1]:i===1?centres[2]:i===2?centres[3]:centres[i%centres.length];
+  const cat=categories[i%4];
+  const severity: any=i===0?'critical':i===1?'high':i===2?'medium':i%9===0?'critical':i%3===0?'high':i%2===0?'medium':'low';
+  const title=i<3?titles[i]:titles[i%titles.length];
+  const reason=i===0?'Expected: 10 | Observed: 6':i===1?'Camera feed unclear for 15+ minutes':i===2?'Image quality below threshold':'Observed occupancy remained below reported attendance for 3 consecutive windows.';
+  const timeStr=i===0?'10:06 AM · 06 Oct 2026':i===1?'10:05 AM · 05 Oct 2026':i===2?'10:04 AM · 04 Oct 2026':`2026-10-${String(7-i%7).padStart(2,'0')}T${String(9+i%8).padStart(2,'0')}:20:00Z`;
+  return {id:`CASE-${String(2401+i)}`,title,category:cat,severity,status:i%8===0?'resolved':i%7===0?'under_review':'open',centreId:c.id,centreName:c.name,state:c.state,district:c.district,roomName:`Workshop ${i%3+1}`,batchName:`Batch ${String(i%6+1).padStart(2,'0')} · ${['Electrical','Fitter','Welding'][i%3]}`,expectedValue:i===0?10:cat==='attendance'?24:4,observedValue:i===0?6:cat==='attendance'?18+i%8:3,confidence:i%5===0?0.42:0.84,evidenceQuality:i%5===0?'low':'high',triggerReason:reason,createdAt:timeStr,updatedAt:'2026-10-07T10:20:00Z',assignedTo:i%3===0?'A. Sharma':undefined,slaDueAt:'2026-10-08T18:00:00Z',evidenceIds:[`EV-${i+1}`]}
+})
 const cameras: Camera[] = Array.from({length:30},(_,i)=>({id:`CAM-${String(i+1).padStart(3,'0')}`,room:`Workshop ${i%3+1}`,status:i%11===0?'offline':i%7===0?'obstructed':i%13===0?'dark':'healthy',quality:i%11===0?0:i%7===0?42:92,lastSync:i%11===0?'38 min ago':'3 min ago',edgeStatus:i%11===0?'Offline':'Online',people:12+i%17}))
 const batches: Batch[] = Array.from({length:18},(_,i)=>({id:`BAT-${i+1}`,name:`Batch ${String(i+1).padStart(2,'0')}`,trade:['Electrical','Fitter','Welding'][i%3],schedule:'09:00 – 13:00',reported:20+i%8,observed:17+i%9,status:i%5===0?'Potential discrepancy':'Compliant'}))
 const inventory: InventoryItem[] = ['Workbenches','Chairs','Computers','Projectors','Training machines','Safety equipment'].flatMap((item,j)=>centres.slice(0,2).map((c,i)=>({item,room:`Workshop ${i+1}`,expected:8+j%4,observed:j===0&&i===0?5:8+j%4,status:j===0&&i===0?'Potential discrepancy':j===3?'Unverifiable':'Compliant'})))
 export function detail(id:string): CentreDetail { const c=centres.find(x=>x.id===id)||centres[0]; return {...c,address:`${c.district} Industrial Estate, ${c.state}`,manager:'Priya Menon',batches:batches.slice(0,3),cameras:cameras.slice((centres.indexOf(c)*2)%24,(centres.indexOf(c)*2)%24+3),inventory:inventory.slice(0,8),timeline:[{date:'07 Oct 2026, 10:20',text:'Camera health check completed',tone:'teal'},{date:'06 Oct 2026, 16:40',text:'Attendance report synced by centre operator',tone:'blue'},{date:'05 Oct 2026, 09:15',text:'Infrastructure inventory reviewed',tone:'amber'}]}}
-export const attendance: AttendanceRecord[] = Array.from({length:7},(_,i)=>({day:['Wed','Thu','Fri','Sat','Sun','Mon','Tue'][i],batch:'All active batches',reported:248+i*3,observed:239-i*2,variance:9+i*5}))
-export const summary: DashboardSummary = {centres,cases,attendanceTrend:attendance.map(x=>({day:x.day,discrepancies:x.variance})),severity:[{name:'Critical',value:3,fill:'#dc5a5a'},{name:'High',value:8,fill:'#d89838'},{name:'Medium',value:11,fill:'#6d86b5'},{name:'Low',value:6,fill:'#7da7a1'}],totals:{activeCentres:12,camerasHealthy:24,camerasTotal:30,activeBatches:18,openCases:22,criticalAlerts:3,offlineCentres:2}}
+export const attendance: AttendanceRecord[] = Array.from({length:7},(_,i)=>({day:['2 Oct','3 Oct','4 Oct','5 Oct','6 Oct','7 Oct','8 Oct'][i],batch:'All active batches',reported:[26000,29000,29500,30000,33000,34500,36000][i],observed:[19000,22000,23000,22500,26000,28000,30000][i],variance:[7000,7000,6500,7500,7000,6500,6000][i]}))
+export const attendanceTrend = [
+  { day: '2 Oct', reported: 26000, observed: 19000, discrepancies: 7000 },
+  { day: '3 Oct', reported: 29000, observed: 22000, discrepancies: 7000 },
+  { day: '4 Oct', reported: 29500, observed: 23000, discrepancies: 6500 },
+  { day: '5 Oct', reported: 30000, observed: 22500, discrepancies: 7500 },
+  { day: '6 Oct', reported: 33000, observed: 26000, discrepancies: 7000 },
+  { day: '7 Oct', reported: 34500, observed: 28000, discrepancies: 6500 },
+  { day: '8 Oct', reported: 36000, observed: 30000, discrepancies: 6000 },
+]
+export const summary: DashboardSummary = {
+  centres,
+  cases,
+  attendanceTrend,
+  severity: [
+    { name: 'Critical', value: 3, fill: '#ef4444' },
+    { name: 'High', value: 8, fill: '#f59e0b' },
+    { name: 'Medium', value: 11, fill: '#3b82f6' },
+  ],
+  totals: {
+    activeCentres: 124,
+    camerasHealthy: 118,
+    camerasTotal: 124,
+    activeBatches: 18,
+    openCases: 22,
+    criticalAlerts: 3,
+    offlineCentres: 6
+  }
+}
 export { cameras, batches, inventory }
 
 // ── Biometric-to-Video Attendance Reconciliation mock data ──

@@ -1,0 +1,634 @@
+{
+  "observation_id": "obs_0ee1a1a8ed11",
+  "centre_id": "TC-MH-0042",
+  "batch_id": "BATCH-DEMO-101",
+  "camera_id": "CAM-CLASSROOM-A",
+  "video": {
+    "filename": "4c55596ff03240c89f707af4bfbbca19.mp4",
+    "fps": 19.89,
+    "total_frames": 200,
+    "resolution": "640x352",
+    "duration_seconds": 10.05
+  },
+  "summary": {
+    "expected_present": 13,
+    "observed_median": 8.0,
+    "observed_mean": 8.0,
+    "observed_min": 6,
+    "observed_max": 11,
+    "sample_count": 5,
+    "detection_confidence": 0.88,
+    "camera_quality_score": 1.0,
+    "count_stability": 0.85,
+    "occlusion_risk": "low",
+    "unique_tracks": 10
+  },
+  "decision": {
+    "status": "REVIEW_REQUIRED",
+    "reason": "Observed count (8) is below reported attendance (13). Manual verification recommended.",
+    "discrepancy": 5.0,
+    "tolerance_people": 2
+  },
+  "windows": [
+    {
+      "window_id": 0,
+      "start_time_seconds": 0.0,
+      "end_time_seconds": 4.02,
+      "observed_median": 5.0,
+      "observed_mean": 4.0,
+      "observed_min": 0,
+      "observed_max": 6,
+      "detection_confidence": 0.595,
+      "camera_quality_score": 1.0,
+      "count_stability": 0.0,
+      "reported_attendance": 13,
+      "compliance_status": "UNVERIFIABLE",
+      "reason": "Observed count is below threshold, but crowding/occlusion or low stability makes the result non-defensible."
+    }
+  ],
+  "events": [
+    {
+      "event_id": "EVT-TC-MH-0042-0000",
+      "event_type": "unverifiable",
+      "centre_id": "TC-MH-0042",
+      "camera_id": "CAM-CLASSROOM-A",
+      "batch_id": "BATCH-DEMO-101",
+      "window_start_seconds": 0.0,
+      "window_end_seconds": 4.02,
+      "reported_attendance": 13,
+      "observed_median_visible_people": 5.0,
+      "camera_quality_score": 1.0,
+      "detection_confidence": 0.595,
+      "count_stability": 0.0,
+      "occlusion_risk": "high",
+      "reason": "Observed count is below threshold, but crowding/occlusion or low stability makes the result non-defensible.",
+      "review_required": true,
+      "generated_at_utc": "2026-10-09T19:25:16.370823+00:00"
+    }
+  ],
+  "run_package": {
+    "run_metadata": {
+      "centre_id": "TC-MH-0042",
+      "camera_id": "CAM-CLASSROOM-A",
+      "batch_id": "BATCH-DEMO-101",
+      "reported_attendance": 13,
+      "occlusion_risk": "high",
+      "model": "RFDETRMedium",
+      "tracker": "ByteTrackTracker",
+      "privacy_mode": "aggregate occupancy; no facial identification"
+    },
+    "events": [
+      {
+        "event_id": "EVT-TC-MH-0042-0000",
+        "event_type": "unverifiable",
+        "centre_id": "TC-MH-0042",
+        "camera_id": "CAM-CLASSROOM-A",
+        "batch_id": "BATCH-DEMO-101",
+        "window_start_seconds": 0.0,
+        "window_end_seconds": 4.02,
+        "reported_attendance": 13,
+        "observed_median_visible_people": 5.0,
+        "camera_quality_score": 1.0,
+        "detection_confidence": 0.595,
+        "count_stability": 0.0,
+        "occlusion_risk": "high",
+        "reason": "Observed count is below threshold, but crowding/occlusion or low stability makes the result non-defensible.",
+        "review_required": true,
+        "generated_at_utc": "2026-10-09T19:25:16.370823+00:00"
+      }
+    ]
+  },
+  "samples": [
+    {
+      "time_seconds": 0.0,
+      "visible_tracked_people": 0,
+      "mean_detection_confidence": 0.0,
+      "camera_quality_score": 1.0,
+      "camera_quality_status": "healthy",
+      "camera_quality_flags": "none",
+      "brightness": 106.6,
+      "blur_variance": 1660.9,
+      "active_track_ids": "",
+      "boxes": []
+    },
+    {
+      "time_seconds": 1.01,
+      "visible_tracked_people": 3,
+      "mean_detection_confidence": 0.802,
+      "camera_quality_score": 1.0,
+      "camera_quality_status": "healthy",
+      "camera_quality_flags": "none",
+      "brightness": 105.4,
+      "blur_variance": 2082.3,
+      "active_track_ids": "0,1,2",
+      "boxes": [
+        {
+          "track_id": 0,
+          "confidence": 0.81,
+          "box": [
+            311.2,
+            67.7,
+            473.2,
+            212.4
+          ]
+        },
+        {
+          "track_id": 1,
+          "confidence": 0.83,
+          "box": [
+            73.5,
+            124.2,
+            194.2,
+            217.2
+          ]
+        },
+        {
+          "track_id": 2,
+          "confidence": 0.76,
+          "box": [
+            297.0,
+            193.1,
+            451.6,
+            343.1
+          ]
+        }
+      ]
+    },
+    {
+      "time_seconds": 2.01,
+      "visible_tracked_people": 6,
+      "mean_detection_confidence": 0.722,
+      "camera_quality_score": 1.0,
+      "camera_quality_status": "healthy",
+      "camera_quality_flags": "none",
+      "brightness": 106.4,
+      "blur_variance": 2098.0,
+      "active_track_ids": "0,1,2,3,4,5",
+      "boxes": [
+        {
+          "track_id": 0,
+          "confidence": 0.8,
+          "box": [
+            297.2,
+            69.9,
+            473.3,
+            210.0
+          ]
+        },
+        {
+          "track_id": 1,
+          "confidence": 0.78,
+          "box": [
+            78.5,
+            124.6,
+            192.4,
+            218.1
+          ]
+        },
+        {
+          "track_id": 2,
+          "confidence": 0.77,
+          "box": [
+            299.2,
+            191.2,
+            451.5,
+            337.3
+          ]
+        },
+        {
+          "track_id": 3,
+          "confidence": 0.61,
+          "box": [
+            177.0,
+            298.7,
+            302.5,
+            351.4
+          ]
+        },
+        {
+          "track_id": 4,
+          "confidence": 0.8,
+          "box": [
+            53.2,
+            160.7,
+            127.3,
+            230.7
+          ]
+        },
+        {
+          "track_id": 5,
+          "confidence": 0.56,
+          "box": [
+            35.2,
+            260.2,
+            102.3,
+            320.3
+          ]
+        }
+      ]
+    },
+    {
+      "time_seconds": 3.02,
+      "visible_tracked_people": 5,
+      "mean_detection_confidence": 0.726,
+      "camera_quality_score": 1.0,
+      "camera_quality_status": "healthy",
+      "camera_quality_flags": "none",
+      "brightness": 107.1,
+      "blur_variance": 1992.5,
+      "active_track_ids": "0,1,2,4,5",
+      "boxes": [
+        {
+          "track_id": 0,
+          "confidence": 0.84,
+          "box": [
+            299.0,
+            72.7,
+            475.7,
+            211.0
+          ]
+        },
+        {
+          "track_id": 1,
+          "confidence": 0.78,
+          "box": [
+            72.6,
+            124.6,
+            194.2,
+            218.8
+          ]
+        },
+        {
+          "track_id": 2,
+          "confidence": 0.75,
+          "box": [
+            304.9,
+            190.7,
+            454.7,
+            341.0
+          ]
+        },
+        {
+          "track_id": 4,
+          "confidence": 0.69,
+          "box": [
+            58.2,
+            160.5,
+            128.9,
+            229.1
+          ]
+        },
+        {
+          "track_id": 5,
+          "confidence": 0.56,
+          "box": [
+            29.6,
+            258.7,
+            103.8,
+            321.1
+          ]
+        }
+      ]
+    },
+    {
+      "time_seconds": 4.02,
+      "visible_tracked_people": 6,
+      "mean_detection_confidence": 0.726,
+      "camera_quality_score": 1.0,
+      "camera_quality_status": "healthy",
+      "camera_quality_flags": "none",
+      "brightness": 107.2,
+      "blur_variance": 1972.2,
+      "active_track_ids": "0,1,2,4,5,6",
+      "boxes": [
+        {
+          "track_id": 0,
+          "confidence": 0.79,
+          "box": [
+            293.6,
+            74.8,
+            476.7,
+            208.7
+          ]
+        },
+        {
+          "track_id": 1,
+          "confidence": 0.63,
+          "box": [
+            76.4,
+            124.5,
+            192.1,
+            220.3
+          ]
+        },
+        {
+          "track_id": 2,
+          "confidence": 0.75,
+          "box": [
+            303.4,
+            192.5,
+            453.3,
+            335.4
+          ]
+        },
+        {
+          "track_id": 4,
+          "confidence": 0.79,
+          "box": [
+            57.9,
+            161.1,
+            128.0,
+            228.3
+          ]
+        },
+        {
+          "track_id": 5,
+          "confidence": 0.62,
+          "box": [
+            29.6,
+            258.9,
+            102.1,
+            319.1
+          ]
+        },
+        {
+          "track_id": 6,
+          "confidence": 0.78,
+          "box": [
+            20.4,
+            197.2,
+            96.4,
+            260.0
+          ]
+        }
+      ]
+    }
+  ],
+  "timeline": [
+    {
+      "time_seconds": 0.0,
+      "visible_tracked_people": 0,
+      "mean_detection_confidence": 0.0,
+      "camera_quality_score": 1.0,
+      "camera_quality_status": "healthy",
+      "camera_quality_flags": "none",
+      "brightness": 106.6,
+      "blur_variance": 1660.9,
+      "active_track_ids": "",
+      "boxes": []
+    },
+    {
+      "time_seconds": 1.01,
+      "visible_tracked_people": 3,
+      "mean_detection_confidence": 0.802,
+      "camera_quality_score": 1.0,
+      "camera_quality_status": "healthy",
+      "camera_quality_flags": "none",
+      "brightness": 105.4,
+      "blur_variance": 2082.3,
+      "active_track_ids": "0,1,2",
+      "boxes": [
+        {
+          "track_id": 0,
+          "confidence": 0.81,
+          "box": [
+            311.2,
+            67.7,
+            473.2,
+            212.4
+          ]
+        },
+        {
+          "track_id": 1,
+          "confidence": 0.83,
+          "box": [
+            73.5,
+            124.2,
+            194.2,
+            217.2
+          ]
+        },
+        {
+          "track_id": 2,
+          "confidence": 0.76,
+          "box": [
+            297.0,
+            193.1,
+            451.6,
+            343.1
+          ]
+        }
+      ]
+    },
+    {
+      "time_seconds": 2.01,
+      "visible_tracked_people": 6,
+      "mean_detection_confidence": 0.722,
+      "camera_quality_score": 1.0,
+      "camera_quality_status": "healthy",
+      "camera_quality_flags": "none",
+      "brightness": 106.4,
+      "blur_variance": 2098.0,
+      "active_track_ids": "0,1,2,3,4,5",
+      "boxes": [
+        {
+          "track_id": 0,
+          "confidence": 0.8,
+          "box": [
+            297.2,
+            69.9,
+            473.3,
+            210.0
+          ]
+        },
+        {
+          "track_id": 1,
+          "confidence": 0.78,
+          "box": [
+            78.5,
+            124.6,
+            192.4,
+            218.1
+          ]
+        },
+        {
+          "track_id": 2,
+          "confidence": 0.77,
+          "box": [
+            299.2,
+            191.2,
+            451.5,
+            337.3
+          ]
+        },
+        {
+          "track_id": 3,
+          "confidence": 0.61,
+          "box": [
+            177.0,
+            298.7,
+            302.5,
+            351.4
+          ]
+        },
+        {
+          "track_id": 4,
+          "confidence": 0.8,
+          "box": [
+            53.2,
+            160.7,
+            127.3,
+            230.7
+          ]
+        },
+        {
+          "track_id": 5,
+          "confidence": 0.56,
+          "box": [
+            35.2,
+            260.2,
+            102.3,
+            320.3
+          ]
+        }
+      ]
+    },
+    {
+      "time_seconds": 3.02,
+      "visible_tracked_people": 5,
+      "mean_detection_confidence": 0.726,
+      "camera_quality_score": 1.0,
+      "camera_quality_status": "healthy",
+      "camera_quality_flags": "none",
+      "brightness": 107.1,
+      "blur_variance": 1992.5,
+      "active_track_ids": "0,1,2,4,5",
+      "boxes": [
+        {
+          "track_id": 0,
+          "confidence": 0.84,
+          "box": [
+            299.0,
+            72.7,
+            475.7,
+            211.0
+          ]
+        },
+        {
+          "track_id": 1,
+          "confidence": 0.78,
+          "box": [
+            72.6,
+            124.6,
+            194.2,
+            218.8
+          ]
+        },
+        {
+          "track_id": 2,
+          "confidence": 0.75,
+          "box": [
+            304.9,
+            190.7,
+            454.7,
+            341.0
+          ]
+        },
+        {
+          "track_id": 4,
+          "confidence": 0.69,
+          "box": [
+            58.2,
+            160.5,
+            128.9,
+            229.1
+          ]
+        },
+        {
+          "track_id": 5,
+          "confidence": 0.56,
+          "box": [
+            29.6,
+            258.7,
+            103.8,
+            321.1
+          ]
+        }
+      ]
+    },
+    {
+      "time_seconds": 4.02,
+      "visible_tracked_people": 6,
+      "mean_detection_confidence": 0.726,
+      "camera_quality_score": 1.0,
+      "camera_quality_status": "healthy",
+      "camera_quality_flags": "none",
+      "brightness": 107.2,
+      "blur_variance": 1972.2,
+      "active_track_ids": "0,1,2,4,5,6",
+      "boxes": [
+        {
+          "track_id": 0,
+          "confidence": 0.79,
+          "box": [
+            293.6,
+            74.8,
+            476.7,
+            208.7
+          ]
+        },
+        {
+          "track_id": 1,
+          "confidence": 0.63,
+          "box": [
+            76.4,
+            124.5,
+            192.1,
+            220.3
+          ]
+        },
+        {
+          "track_id": 2,
+          "confidence": 0.75,
+          "box": [
+            303.4,
+            192.5,
+            453.3,
+            335.4
+          ]
+        },
+        {
+          "track_id": 4,
+          "confidence": 0.79,
+          "box": [
+            57.9,
+            161.1,
+            128.0,
+            228.3
+          ]
+        },
+        {
+          "track_id": 5,
+          "confidence": 0.62,
+          "box": [
+            29.6,
+            258.9,
+            102.1,
+            319.1
+          ]
+        },
+        {
+          "track_id": 6,
+          "confidence": 0.78,
+          "box": [
+            20.4,
+            197.2,
+            96.4,
+            260.0
+          ]
+        }
+      ]
+    }
+  ],
+  "annotated_video_url": "/v1/analysis/video/obs_0ee1a1a8ed11/annotated"
+}
