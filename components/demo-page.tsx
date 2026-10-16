@@ -331,8 +331,10 @@ export function DemoPage() {
       if (viewMode === 'ai' || viewMode === 'split') {
         const timeSec = video.currentTime
 
-        const scaleX = width / 640
-        const scaleY = height / 352
+        const baseW = aiResult?.video_metadata?.width || 640
+        const baseH = aiResult?.video_metadata?.height || 352
+        const scaleX = width / baseW
+        const scaleY = height / baseH
 
         let boxesToDraw: Array<{
           x1: number
@@ -399,11 +401,30 @@ export function DemoPage() {
             const isPerson = (bA.category === 'person') || (bA.class_name === 'person')
 
             if (bB) {
+              const cxA = (bA.box[0] + bA.box[2]) / 2
+              const cyA = (bA.box[1] + bA.box[3]) / 2
+              const cxB = (bB.box[0] + bB.box[2]) / 2
+              const cyB = (bB.box[1] + bB.box[3]) / 2
+              const dist = Math.hypot(cxB - cxA, cyB - cyA)
+
+              // SEATED PERSISTENT LOCK:
+              // If person is seated in their chair (center shift < 20px) or object is stationary (< 30px),
+              // rigidly freeze coordinates to bA.box so the box never slides or vibrates.
+              const isStationary = isPerson ? dist < 20 : dist < 30
+              const useBox = isStationary
+                ? bA.box
+                : [
+                    (1 - alpha) * bA.box[0] + alpha * bB.box[0],
+                    (1 - alpha) * bA.box[1] + alpha * bB.box[1],
+                    (1 - alpha) * bA.box[2] + alpha * bB.box[2],
+                    (1 - alpha) * bA.box[3] + alpha * bB.box[3],
+                  ]
+
               interpolated.push({
-                x1: (1 - alpha) * bA.box[0] + alpha * bB.box[0],
-                y1: (1 - alpha) * bA.box[1] + alpha * bB.box[1],
-                x2: (1 - alpha) * bA.box[2] + alpha * bB.box[2],
-                y2: (1 - alpha) * bA.box[3] + alpha * bB.box[3],
+                x1: useBox[0],
+                y1: useBox[1],
+                x2: useBox[2],
+                y2: useBox[3],
                 conf: (1 - alpha) * bA.confidence + alpha * bB.confidence,
                 track_id: bA.track_id,
                 class_name: bA.class_name || (isPerson ? 'person' : 'object'),
@@ -702,7 +723,7 @@ export function DemoPage() {
                     ANALYSING SURVEILLANCE FOOTAGE
                   </h3>
                   <p className="text-xs text-cyan-300/80 mb-3 font-mono">
-                    Ultralytics YOLOv8 + ByteTrack Kalman Association
+                    Roboflow RF-DETR Transformer + Seated Persistent Lock
                   </p>
                   <div className="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                     <div

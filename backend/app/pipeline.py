@@ -46,6 +46,7 @@ class LocalVideoAnalyzer:
 
     def __init__(self) -> None:
         self.model = None
+        self.model_type = None
         self.coco_classes = get_coco_classes()
         self.person_class_id = self._resolve_person_class_id()
         self.hog_detector = None
@@ -110,10 +111,48 @@ class LocalVideoAnalyzer:
         frame_rgb: np.ndarray,
         time_sec: float = 0.0,
     ) -> list[dict]:
-        """Detect all persons and objects (chairs, desks, laptops, screens, bags) in the frame using real neural vision."""
+        """Detect all persons and objects (chairs, desks, laptops, screens, bags) using Roboflow RF-DETR Transformer."""
         model = self._get_model()
 
-        # 1. Ultralytics YOLOv8 Neural Inference (Genuine Real-Time Detection)
+        # 1. RF-DETR Transformer (https://github.com/roboflow/rf-detr) - Primary Detector
+        if self.model_type == "rfdetr" and model is not None:
+            try:
+                raw_detections = model.predict(frame_rgb, threshold=0.22)
+                detections = raw_detections.with_nms(threshold=0.45)
+
+                boxes = []
+                if len(detections) > 0:
+                    for i, (box_coords, conf, cid) in enumerate(zip(detections.xyxy, detections.confidence, detections.class_id)):
+                        cid = int(cid)
+                        # In RF-DETR COCO classes: class 1 is person
+                        is_person = (cid == 1)
+                        category = "person" if is_person else "object"
+                        c_name = self.get_class_name(cid)
+                        clean_name = "person" if is_person else (
+                            "backpack" if cid in [33, 27, 28] else (
+                                "notebook" if cid == 84 else (
+                                    "desk" if cid in [70, 72] else (
+                                        "screen" if cid in [62, 63] else (
+                                            "chair" if cid in [65, 66] else "object"
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                        boxes.append({
+                            "track_id": i + 1,
+                            "confidence": round(float(conf), 2),
+                            "class_name": clean_name,
+                            "category": category,
+                            "class_id": cid,
+                            "box": [round(float(c), 1) for c in box_coords],
+                        })
+                if len(boxes) > 0:
+                    return boxes
+            except Exception as e:
+                logger.warning("RF-DETR prediction failed (%s); trying fallback detector.", e)
+
+        # 2. Ultralytics YOLOv8 Fallback if RF-DETR is not loaded
         if self.model_type == "yolo" and model is not None:
             try:
                 results = model.predict(frame_bgr, conf=0.10, verbose=False)
@@ -125,11 +164,8 @@ class LocalVideoAnalyzer:
                     conf = round(float(b.conf[0]), 2)
                     xyxy = [round(float(c), 1) for c in b.xyxy[0]]
 
-                    # Overhead classroom CCTV: seated trainees writing with heads down
-                    # are detected as person or teddy bear (COCO top-down head/shoulders shape)
                     is_person = (cname in ["person", "teddy bear"])
                     category = "person" if is_person else "object"
-
                     clean_name = "person" if is_person else (
                         "desk" if cname in ["dining table", "bench", "desk"] else (
                             "laptop" if cname in ["laptop", "tv", "screen"] else (
@@ -150,33 +186,7 @@ class LocalVideoAnalyzer:
                 if len(boxes) > 0:
                     return boxes
             except Exception as e:
-                logger.warning("YOLO prediction error: %s; falling back to RF-DETR/resilient.", e)
-
-        # 2. RF-DETR Model Inference if available
-        if self.model_type == "rfdetr" and model is not None:
-            try:
-                raw_detections = model.predict(frame_rgb, threshold=settings.confidence_threshold)
-                detections = raw_detections.with_nms(threshold=settings.nms_iou_threshold)
-
-                boxes = []
-                if len(detections) > 0:
-                    for i, (box_coords, conf, cid) in enumerate(zip(detections.xyxy, detections.confidence, detections.class_id)):
-                        c_name = self.get_class_name(int(cid))
-                        is_person = (c_name.lower() == "person" or int(cid) == self.person_class_id)
-                        category = "person" if is_person else "object"
-                        clean_name = "desk" if "table" in c_name else ("screen" if c_name in ["tv", "monitor"] else c_name)
-                        boxes.append({
-                            "track_id": i + 1,
-                            "confidence": round(float(conf), 2),
-                            "class_name": "person" if is_person else clean_name,
-                            "category": category,
-                            "class_id": int(cid),
-                            "box": [round(float(c), 1) for c in box_coords],
-                        })
-                if len(boxes) > 0:
-                    return boxes
-            except Exception as e:
-                logger.warning("RF-DETR prediction failed (%s); using resilient classroom detector.", e)
+                logger.warning("YOLO prediction error: %s; falling back to geometric.", e)
 
         # 3. Geometric Classroom Multi-Object Detection Engine (fallback only if model cannot run)
         h, w = frame_bgr.shape[:2]
@@ -293,7 +303,7 @@ class LocalVideoAnalyzer:
         if duration_sec > 30.0:
             sample_interval = max(1.0, duration_sec / 55.0)
         else:
-            sample_interval = max(0.4, settings.sample_every_seconds)
+            sample_interval = max(1.0, settings.sample_every_seconds)
 
         sample_stride = max(1, int(round(fps * sample_interval)))
         observation_id = f"obs_{uuid.uuid4().hex[:12]}"
@@ -310,8 +320,10 @@ class LocalVideoAnalyzer:
         samples = []
         timeline = []
         seen_track_ids = set()
-        active_tracks: dict[int, list[float]] = {}
-        next_track_id = 1
+        active_person_tracks: dict[int, dict] = {}
+        active_object_tracks: dict[int, dict] = {}
+        next_person_track_id = 1
+        next_object_track_id = 100
         frame_index = 0
 
         while True:
@@ -325,18 +337,27 @@ class LocalVideoAnalyzer:
                 time_sec = round(frame_index / fps, 2)
                 frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
 
-                # Detect BOTH people and classroom objects in real time
+                # Detect BOTH people and classroom objects using RF-DETR Transformer
                 all_boxes = self._detect_objects_and_persons(frame_bgr, frame_rgb, time_sec=time_sec)
 
                 person_boxes = [b for b in all_boxes if b.get("category") == "person"]
                 object_boxes = [b for b in all_boxes if b.get("category") == "object"]
 
-                # Continuous IoU tracking association for stable person identities
+                # Continuous 1-to-1 association with Persistent Seated Lock for trainees
+                person_boxes.sort(key=lambda x: x["confidence"], reverse=True)
+                matched_tracks = set()
+
                 for p in person_boxes:
                     pbox = p["box"]
-                    best_iou = 0.0
+                    cx = (pbox[0] + pbox[2]) / 2.0
+                    cy = (pbox[1] + pbox[3]) / 2.0
                     best_tid = None
-                    for tid, tbox in active_tracks.items():
+                    best_metric = 0.0
+
+                    for tid, tinfo in active_person_tracks.items():
+                        if tid in matched_tracks:
+                            continue
+                        tbox = tinfo["locked_box"]
                         xA = max(pbox[0], tbox[0])
                         yA = max(pbox[1], tbox[1])
                         xB = min(pbox[2], tbox[2])
@@ -345,17 +366,86 @@ class LocalVideoAnalyzer:
                         areaA = (pbox[2] - pbox[0]) * (pbox[3] - pbox[1])
                         areaB = (tbox[2] - tbox[0]) * (tbox[3] - tbox[1])
                         iou = inter / float(areaA + areaB - inter + 1e-6)
-                        if iou > best_iou:
+
+                        tcx = (tbox[0] + tbox[2]) / 2.0
+                        tcy = (tbox[1] + tbox[3]) / 2.0
+                        dist = np.hypot(cx - tcx, cy - tcy)
+
+                        if iou >= 0.18 or (dist <= 35.0 and iou > 0.05):
+                            score = iou + max(0.0, (50.0 - dist) / 50.0)
+                            if score > best_metric:
+                                best_metric = score
+                                best_tid = tid
+
+                    if best_tid is not None:
+                        matched_tracks.add(best_tid)
+                        p["track_id"] = best_tid
+                        tinfo = active_person_tracks[best_tid]
+                        tinfo["last_seen"] = frame_index
+                        tcx = (tinfo["locked_box"][0] + tinfo["locked_box"][2]) / 2.0
+                        tcy = (tinfo["locked_box"][1] + tinfo["locked_box"][3]) / 2.0
+                        dist = np.hypot(cx - tcx, cy - tcy)
+                        # PERSISTENT SEATED LOCK:
+                        # If center displacement is under 22px, the trainee is sitting still at their desk.
+                        # Rigidly freeze the bounding box coordinates to eliminate wobbling/sliding.
+                        if dist < 22.0:
+                            p["box"] = tinfo["locked_box"]
+                        else:
+                            p["box"] = pbox
+                            tinfo["locked_box"] = pbox
+                    else:
+                        tid = next_person_track_id
+                        next_person_track_id += 1
+                        active_person_tracks[tid] = {"locked_box": pbox, "last_seen": frame_index}
+                        matched_tracks.add(tid)
+                        p["track_id"] = tid
+
+                # Maintain active person tracks within memory window
+                active_person_tracks = {
+                    tid: tinfo for tid, tinfo in active_person_tracks.items()
+                    if (frame_index - tinfo["last_seen"]) <= (sample_stride * 10)
+                }
+
+                # Stationary lock for classroom furniture and objects
+                matched_obj_tracks = set()
+                for o in object_boxes:
+                    obox = o["box"]
+                    best_tid = None
+                    best_iou = 0.0
+
+                    for tid, tinfo in active_object_tracks.items():
+                        if tid in matched_obj_tracks:
+                            continue
+                        if tinfo.get("class_name") != o.get("class_name"):
+                            continue
+                        tbox = tinfo["locked_box"]
+                        xA = max(obox[0], tbox[0])
+                        yA = max(obox[1], tbox[1])
+                        xB = min(obox[2], tbox[2])
+                        yB = min(obox[3], tbox[3])
+                        inter = max(0.0, xB - xA) * max(0.0, yB - yA)
+                        areaA = (obox[2] - obox[0]) * (obox[3] - obox[1])
+                        areaB = (tbox[2] - tbox[0]) * (tbox[3] - tbox[1])
+                        iou = inter / float(areaA + areaB - inter + 1e-6)
+                        if iou > best_iou and iou >= 0.20:
                             best_iou = iou
                             best_tid = tid
 
-                    if best_iou >= 0.20 and best_tid is not None:
-                        p["track_id"] = best_tid
-                        active_tracks[best_tid] = pbox
+                    if best_tid is not None:
+                        matched_obj_tracks.add(best_tid)
+                        o["track_id"] = best_tid
+                        o["box"] = active_object_tracks[best_tid]["locked_box"]
+                        active_object_tracks[best_tid]["last_seen"] = frame_index
                     else:
-                        p["track_id"] = next_track_id
-                        active_tracks[next_track_id] = pbox
-                        next_track_id += 1
+                        tid = next_object_track_id
+                        next_object_track_id += 1
+                        active_object_tracks[tid] = {
+                            "locked_box": obox,
+                            "class_name": o.get("class_name"),
+                            "last_seen": frame_index,
+                        }
+                        matched_obj_tracks.add(tid)
+                        o["track_id"] = tid
 
                 for p in person_boxes:
                     seen_track_ids.add(p["track_id"])
