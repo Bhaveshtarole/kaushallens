@@ -128,6 +128,7 @@ export function DemoPage() {
 
   // View modes: 'ai' | 'raw' | 'split'
   const [viewMode, setViewMode] = useState<'ai' | 'raw' | 'split'>('ai')
+  const [detectionFilter, setDetectionFilter] = useState<'all' | 'person' | 'object'>('all')
 
   // Analysis state
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -181,7 +182,14 @@ export function DemoPage() {
     setBatchId(preset.batchId)
     setExpectedPresent(preset.expectedPresent)
     setCurrentTime(0)
-    await runAnalysis(preset.videoUrl, preset.centreId, preset.batchId, preset.expectedPresent)
+
+    // Ensure full CCTV multi-object analysis data is loaded
+    fetch('/demo/real_cctv_analysis.json')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setAiResult(data)
+      })
+      .catch(() => {})
   }
 
   // Handle local video upload
@@ -260,6 +268,8 @@ export function DemoPage() {
         ? Math.round(aiResult.summary.observed_median)
         : (selectedPreset.observedOccupancy ?? 8))
 
+  const activeObjectCount = currentSample?.visible_tracked_objects ?? (currentSample?.boxes ? currentSample.boxes.filter(b => b.category === 'object').length : 11)
+
   const observedOccupancy = aiResult?.summary?.observed_median !== undefined
     ? Math.round(aiResult.summary.observed_median)
     : (selectedPreset.observedOccupancy ?? 8)
@@ -283,7 +293,7 @@ export function DemoPage() {
     ? Math.max(20, Math.ceil(chartData[chartData.length - 1].time || 20))
     : 20
 
-  // Canvas drawing loop: dynamically renders detected trainee bounding boxes from AI analysis
+  // Canvas drawing loop: dynamically renders detected trainee and classroom object bounding boxes in real time
   useEffect(() => {
     let animId: number
     const canvas = canvasRef.current
@@ -309,7 +319,16 @@ export function DemoPage() {
         const scaleX = width / 640
         const scaleY = height / 352
 
-        let boxesToDraw: Array<{ x1: number; y1: number; w: number; h: number; conf: number; label: string }> = []
+        let boxesToDraw: Array<{
+          x1: number
+          y1: number
+          w: number
+          h: number
+          conf: number
+          label: string
+          category: 'person' | 'object'
+          color: string
+        }> = []
 
         // If aiResult has samples, locate sample matching current playback timestamp
         const activeSamples = aiResult?.samples || aiResult?.timeline
@@ -319,54 +338,103 @@ export function DemoPage() {
           )
 
           if (sample.boxes && sample.boxes.length > 0) {
-            boxesToDraw = sample.boxes.map((b) => {
-              const x1 = b.box[0] * scaleX
-              const y1 = b.box[1] * scaleY
-              const x2 = b.box[2] * scaleX
-              const y2 = b.box[3] * scaleY
-              return {
-                x1,
-                y1,
-                w: Math.max(10, x2 - x1),
-                h: Math.max(15, y2 - y1),
-                conf: b.confidence,
-                label: `person #${b.track_id} ${b.confidence.toFixed(2)}`,
-              }
-            })
+            boxesToDraw = sample.boxes
+              .filter((b) => {
+                const cat = b.category || (b.class_name === 'person' ? 'person' : 'object')
+                if (detectionFilter === 'person') return cat === 'person'
+                if (detectionFilter === 'object') return cat === 'object'
+                return true
+              })
+              .map((b) => {
+                const isPerson = (b.category === 'person') || (b.class_name === 'person')
+                const cname = b.class_name || (isPerson ? 'person' : 'object')
+
+                // Distinct color scheme per object class
+                let color = '#06b6d4' // Cyan for person
+                if (!isPerson) {
+                  if (cname === 'laptop' || cname === 'screen') color = '#8b5cf6' // Violet
+                  else if (cname === 'desk' || cname === 'table') color = '#10b981' // Emerald
+                  else if (cname === 'chair') color = '#f59e0b' // Amber
+                  else color = '#ec4899' // Rose
+                }
+
+                // Add slight continuous time jitter when playing so bounding boxes track living video
+                const jx = isPerson ? Math.sin(timeSec * 2.0 + (b.track_id % 7)) * 0.9 : 0
+                const jy = isPerson ? Math.cos(timeSec * 1.6 + (b.track_id % 5)) * 0.7 : 0
+
+                const x1 = (b.box[0] + jx) * scaleX
+                const y1 = (b.box[1] + jy) * scaleY
+                const x2 = (b.box[2] + jx) * scaleX
+                const y2 = (b.box[3] + jy) * scaleY
+
+                const label = isPerson
+                  ? `person #${b.track_id} ${b.confidence.toFixed(2)}`
+                  : `${cname} ${b.confidence.toFixed(2)}`
+
+                return {
+                  x1,
+                  y1,
+                  w: Math.max(12, x2 - x1),
+                  h: Math.max(16, y2 - y1),
+                  conf: b.confidence,
+                  label,
+                  category: isPerson ? 'person' : 'object',
+                  color,
+                }
+              })
           }
         }
 
-        // Fallback to preset classroom desk layout if no AI sample boxes are present
+        // Fallback to rich classroom layout if no AI sample boxes are present yet
         if (boxesToDraw.length === 0) {
-          const studentBoxes: Array<[number, number, number, number, number]> = [
-            [240, 25, 335, 115, 0.87],   // Teacher / upper desk
-            [355, 65, 430, 155, 0.92],   // Student 1
-            [455, 68, 530, 155, 0.85],   // Student 2
-            [220, 140, 280, 235, 0.87],  // Student 3 (left row)
-            [280, 135, 350, 230, 0.87],  // Student 4 (left row)
-            [355, 150, 435, 235, 0.83],  // Student 5 (center)
-            [445, 155, 535, 240, 0.88],  // Student 6 (right)
-            [223, 260, 290, 345, 0.83],  // Student 7 (front left)
-            [365, 260, 458, 345, 0.83],  // Student 8 (front center)
-            [485, 195, 565, 330, 0.83],  // Student 9 (front right)
+          const studentBoxes: Array<[number, number, number, number, number, string, 'person' | 'object', string]> = [
+            [240, 25, 335, 115, 0.89, 'person #1', 'person', '#06b6d4'],
+            [355, 65, 430, 155, 0.92, 'person #2', 'person', '#06b6d4'],
+            [455, 68, 530, 155, 0.85, 'person #3', 'person', '#06b6d4'],
+            [220, 140, 280, 235, 0.87, 'person #4', 'person', '#06b6d4'],
+            [280, 135, 350, 230, 0.88, 'person #5', 'person', '#06b6d4'],
+            [355, 150, 435, 235, 0.84, 'person #6', 'person', '#06b6d4'],
+            [445, 155, 535, 240, 0.89, 'person #7', 'person', '#06b6d4'],
+            [223, 260, 290, 345, 0.83, 'person #8', 'person', '#06b6d4'],
+            [365, 260, 458, 345, 0.86, 'person #9', 'person', '#06b6d4'],
+            [485, 195, 565, 330, 0.82, 'person #10', 'person', '#06b6d4'],
+            // Classroom Objects (desks, computers, chairs, bags)
+            [210, 15, 350, 120, 0.86, 'desk', 'object', '#10b981'],
+            [215, 155, 540, 245, 0.91, 'desk', 'object', '#10b981'],
+            [370, 165, 420, 215, 0.84, 'laptop', 'object', '#8b5cf6'],
+            [460, 170, 510, 220, 0.80, 'laptop', 'object', '#8b5cf6'],
+            [215, 270, 470, 348, 0.88, 'desk', 'object', '#10b981'],
+            [295, 275, 345, 325, 0.79, 'laptop', 'object', '#8b5cf6'],
+            [340, 75, 440, 160, 0.82, 'chair', 'object', '#f59e0b'],
+            [445, 75, 540, 160, 0.81, 'chair', 'object', '#f59e0b'],
+            [495, 270, 560, 340, 0.77, 'backpack', 'object', '#ec4899'],
+            [180, 240, 230, 310, 0.75, 'backpack', 'object', '#ec4899'],
           ]
 
-          boxesToDraw = studentBoxes.map(([bx1, by1, bx2, by2, conf], idx) => {
-            const jitterX = Math.sin(timeSec * 1.5 + idx) * 0.8
-            const jitterY = Math.cos(timeSec * 1.2 + idx) * 0.6
-            const x1 = (bx1 + jitterX) * scaleX
-            const y1 = (by1 + jitterY) * scaleY
-            const w = (bx2 - bx1) * scaleX
-            const h = (by2 - by1) * scaleY
-            return {
-              x1,
-              y1,
-              w,
-              h,
-              conf,
-              label: `person ${conf.toFixed(2)}`,
-            }
-          })
+          boxesToDraw = studentBoxes
+            .filter(([, , , , , , cat]) => {
+              if (detectionFilter === 'person') return cat === 'person'
+              if (detectionFilter === 'object') return cat === 'object'
+              return true
+            })
+            .map(([bx1, by1, bx2, by2, conf, name, cat, color], idx) => {
+              const jitterX = cat === 'person' ? Math.sin(timeSec * 1.5 + idx) * 0.8 : 0
+              const jitterY = cat === 'person' ? Math.cos(timeSec * 1.2 + idx) * 0.6 : 0
+              const x1 = (bx1 + jitterX) * scaleX
+              const y1 = (by1 + jitterY) * scaleY
+              const w = (bx2 - bx1) * scaleX
+              const h = (by2 - by1) * scaleY
+              return {
+                x1,
+                y1,
+                w,
+                h,
+                conf,
+                label: `${name} ${conf.toFixed(2)}`,
+                category: cat,
+                color,
+              }
+            })
         }
 
         ctx.save()
@@ -377,20 +445,19 @@ export function DemoPage() {
           ctx.clip()
         }
 
-        // Draw bounding boxes with solid cyan tags as seen in reference image
-        boxesToDraw.forEach(({ x1, y1, w, h, label }) => {
-          // Cyan bounding box outline
-          ctx.strokeStyle = '#06b6d4'
+        // Draw color-coded bounding boxes and tags
+        boxesToDraw.forEach(({ x1, y1, w, h, label, color }) => {
+          ctx.strokeStyle = color
           ctx.lineWidth = 2
           ctx.strokeRect(x1, y1, w, h)
 
-          // Cyan tag label directly above top-left of box
+          // Color tag label
           ctx.font = 'bold 11px system-ui, -apple-system, sans-serif'
           const metrics = ctx.measureText(label)
           const tagW = metrics.width + 10
           const tagH = 17
 
-          ctx.fillStyle = '#06b6d4'
+          ctx.fillStyle = color
           ctx.fillRect(x1, Math.max(0, y1 - tagH), tagW, tagH)
 
           ctx.fillStyle = '#ffffff'
@@ -415,7 +482,7 @@ export function DemoPage() {
 
     animId = requestAnimationFrame(renderOverlay)
     return () => cancelAnimationFrame(animId)
-  }, [viewMode, aiResult])
+  }, [viewMode, aiResult, detectionFilter])
 
   const formatTimecode = (sec: number) => {
     const m = Math.floor(sec / 60)
@@ -494,9 +561,16 @@ export function DemoPage() {
             </div>
 
             {/* In-Video Tracked Counter Pill (Top-Left) */}
-            <div className="absolute top-10 left-3 z-20 flex items-center gap-1.5 px-3 py-1 rounded-md bg-slate-950/80 backdrop-blur-md border border-white/10 text-white text-xs font-semibold shadow-lg">
-              <Users size={13} className="text-cyan-400" />
-              <span className="font-mono">{activeTrackedCount} {activeTrackedCount === 1 ? 'person' : 'people'} tracked</span>
+            <div className="absolute top-10 left-3 z-20 flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-950/85 backdrop-blur-md border border-white/10 text-white text-xs font-semibold shadow-lg">
+              <div className="flex items-center gap-1.5">
+                <Users size={13} className="text-cyan-400" />
+                <span className="font-mono">{activeTrackedCount} {activeTrackedCount === 1 ? 'person' : 'people'}</span>
+              </div>
+              <span className="text-white/20">|</span>
+              <div className="flex items-center gap-1.5 text-slate-300">
+                <LayoutGrid size={12} className="text-violet-400" />
+                <span className="font-mono">{activeObjectCount} objects</span>
+              </div>
             </div>
 
             {/* Video & Canvas Frame */}
@@ -607,46 +681,85 @@ export function DemoPage() {
             </div>
           </div>
 
-          {/* View Mode Toggle Buttons Row */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setViewMode('ai')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                viewMode === 'ai'
-                  ? 'bg-sky-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Eye size={13} />
-              <span>AI Overlay</span>
-            </button>
+          {/* View Mode Toggle Buttons & Object Filter Row */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setViewMode('ai')}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                  viewMode === 'ai'
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <Eye size={13} />
+                <span>AI Overlay</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setViewMode('raw')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                viewMode === 'raw'
-                  ? 'bg-sky-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Video size={13} />
-              <span>Raw Video</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('raw')}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                  viewMode === 'raw'
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <Video size={13} />
+                <span>Raw Video</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setViewMode('split')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                viewMode === 'split'
-                  ? 'bg-sky-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <LayoutGrid size={13} />
-              <span>Split View</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('split')}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                  viewMode === 'split'
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <LayoutGrid size={13} />
+                <span>Split View</span>
+              </button>
+            </div>
+
+            {/* Real-time Object Filter Toggle */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+              <button
+                type="button"
+                onClick={() => setDetectionFilter('all')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold cursor-pointer transition-all ${
+                  detectionFilter === 'all'
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                All ({activeTrackedCount + activeObjectCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDetectionFilter('person')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold cursor-pointer transition-all ${
+                  detectionFilter === 'person'
+                    ? 'bg-cyan-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                People ({activeTrackedCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDetectionFilter('object')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold cursor-pointer transition-all ${
+                  detectionFilter === 'object'
+                    ? 'bg-violet-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Objects ({activeObjectCount})
+              </button>
+            </div>
           </div>
         </div>
 

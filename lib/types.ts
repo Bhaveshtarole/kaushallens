@@ -97,11 +97,16 @@ export type ColabBoundingBox = {
   track_id: number
   confidence: number
   box: [number, number, number, number] // [x1, y1, x2, y2]
+  class_name?: string
+  category?: 'person' | 'object'
+  class_id?: number
 }
 
 export type ColabSample = {
   time_seconds: number
   visible_tracked_people: number
+  visible_tracked_objects?: number
+  object_breakdown?: Record<string, number>
   mean_detection_confidence: number
   camera_quality_score: number
   camera_quality_status: string
