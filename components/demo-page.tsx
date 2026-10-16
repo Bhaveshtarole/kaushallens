@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowDown,
+  ArrowUpRight,
   Camera,
   CheckCircle2,
   Cpu,
@@ -13,6 +14,7 @@ import {
   Pause,
   Play,
   Settings,
+  ShieldCheck,
   Sparkles,
   Upload,
   Users,
@@ -132,9 +134,20 @@ export function DemoPage() {
   const [selectedPreset, setSelectedPreset] = useState<SampleVideoPreset>(SAMPLE_PRESETS[0])
   const [customFile, setCustomFile] = useState<File | null>(null)
   const [customVideoUrl, setCustomVideoUrl] = useState<string | null>(null)
-  const [centreId, setCentreId] = useState('TC-MH-0042')
-  const [batchId, setBatchId] = useState('BATCH-DEMO-101')
-  const [expectedPresent, setExpectedPresent] = useState(13)
+  const [centreId, setCentreId] = useState('TC-DL-0018')
+  const [batchId, setBatchId] = useState('BATCH-CLASS-ONE')
+  const [expectedPresent, setExpectedPresent] = useState(15)
+
+  // Real-time synchronization state with Command Centre
+  const [availableCentres, setAvailableCentres] = useState<Array<{ id: string; name: string; state: string }>>([])
+  const [syncNotice, setSyncNotice] = useState<{
+    centreId: string
+    centreName?: string
+    status: string
+    observed: number
+    expected: number
+    matchPct: number
+  } | null>(null)
 
   // Video playback
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -155,12 +168,20 @@ export function DemoPage() {
 
   const activeVideoSrc = customVideoUrl || selectedPreset.videoUrl
 
-  // Load real CCTV analysis data on mount
+  // Load registered centres and check URL parameters on mount
   useEffect(() => {
-    fetch('/demo/real_cctv_analysis.json')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data) setAiResult(data)
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const qCentre = params.get('centre')
+      if (qCentre) {
+        setCentreId(qCentre)
+      }
+    }
+
+    fetch('/api/centres')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((list) => {
+        if (Array.isArray(list)) setAvailableCentres(list)
       })
       .catch(() => {})
   }, [])
@@ -237,6 +258,18 @@ export function DemoPage() {
         setIsAnalyzing(false)
         if (data.rawAiResponse) {
           setAiResult(data.rawAiResponse)
+        }
+        if (data.reconciliation) {
+          const rec = data.reconciliation
+          const matchPct = Math.min(100, Math.round((rec.observedMedian / Math.max(1, rec.expectedPresent)) * 100))
+          setSyncNotice({
+            centreId: cId,
+            centreName: rec.centreName,
+            status: rec.status,
+            observed: rec.observedMedian,
+            expected: rec.expectedPresent,
+            matchPct,
+          })
         }
       }, 400)
     } catch {
@@ -1017,15 +1050,43 @@ export function DemoPage() {
             {/* 3 Form Input Columns */}
             <div className="grid grid-cols-3 gap-2.5 mb-3">
               <div>
-                <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                  Centre ID
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-semibold text-slate-600">
+                    Centre ID
+                  </label>
+                  {availableCentres.length > 0 && (
+                    <select
+                      className="text-[10px] text-sky-700 bg-sky-50 border border-sky-200 rounded px-1 py-0.5 cursor-pointer"
+                      onChange={(e) => {
+                        if (e.target.value) setCentreId(e.target.value)
+                      }}
+                      value=""
+                      aria-label="Select from registered centres"
+                    >
+                      <option value="" disabled>Pick...</option>
+                      {availableCentres.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.id} · {c.state}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
                 <input
                   type="text"
+                  list="centre-list-options"
                   value={centreId}
                   onChange={(e) => setCentreId(e.target.value)}
                   className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white font-mono text-slate-800"
+                  placeholder="e.g. TC-DL-0018"
                 />
+                <datalist id="centre-list-options">
+                  {availableCentres.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.state})
+                    </option>
+                  ))}
+                </datalist>
               </div>
 
               <div>
@@ -1074,6 +1135,44 @@ export function DemoPage() {
 
       {/* ── Bottom Section: Results & Occupancy Trend ── */}
       <div className="flex flex-col gap-4">
+        {/* Live Command Centre Synchronization Banner */}
+        {syncNotice && (
+          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 border border-emerald-300 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold flex-shrink-0 shadow-sm">
+                <CheckCircle2 size={18} />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-emerald-950 flex items-center gap-2 flex-wrap">
+                  <span>AI Video Analysis Connected & Live Synced to Command Centre</span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-200/90 text-emerald-900 text-[10px] font-mono font-bold">
+                    {syncNotice.centreId}
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-800 mt-0.5">
+                  Centre compliance recorded: <b>{syncNotice.status.replace(/_/g, ' ')}</b> ({syncNotice.observed} observed aggregate / {syncNotice.expected} reported · {syncNotice.matchPct}% compliance). Instantly reflected in Command Centre metrics, State filters, and Risk ranking.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <a
+                href="/dashboard"
+                className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors no-underline shadow-sm"
+              >
+                <span>Command Centre</span>
+                <ArrowUpRight size={13} />
+              </a>
+              <a
+                href="/centres"
+                className="px-3 py-1.5 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-800 text-xs font-semibold flex items-center gap-1.5 transition-colors no-underline shadow-sm"
+              >
+                <span>View Centres</span>
+              </a>
+            </div>
+          </div>
+        )}
+
         {/* Attendance Compliance Result Card */}
         <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-sm">
           <h3 className="font-bold text-sm text-slate-900 mb-3">Attendance compliance result</h3>

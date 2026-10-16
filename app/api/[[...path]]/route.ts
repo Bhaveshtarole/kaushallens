@@ -37,7 +37,36 @@ export async function GET(req: Request, { params }: RouteParams) {
   }
 
   // ── Existing Dashboard & Operational routes ──
-  if (key === 'dashboard/summary') return NextResponse.json(summary)
+  if (key === 'dashboard/summary') {
+    const activeCentres = centres.length
+    const camerasHealthy = centres.reduce((acc, c) => acc + (c.camerasHealthy || 0), 0)
+    const camerasTotal = centres.reduce((acc, c) => acc + (c.camerasTotal || 3), 0)
+    const openCases = cases.filter(c => c.status === 'open' || c.status === 'under_review').length
+    const criticalAlerts = cases.filter(c => c.severity === 'critical' && c.status !== 'resolved' && c.status !== 'closed').length
+    const highAlerts = cases.filter(c => c.severity === 'high' && c.status !== 'resolved' && c.status !== 'closed').length
+    const mediumAlerts = cases.filter(c => c.severity === 'medium' && c.status !== 'resolved' && c.status !== 'closed').length
+    const offlineCentres = centres.filter(c => c.status === 'Camera Issue' || c.status === 'Offline' || c.status === 'Unverifiable').length
+
+    return NextResponse.json({
+      ...summary,
+      centres,
+      cases,
+      severity: [
+        { name: 'Critical', value: Math.max(1, criticalAlerts), fill: '#ef4444' },
+        { name: 'High', value: Math.max(1, highAlerts), fill: '#f59e0b' },
+        { name: 'Medium', value: Math.max(1, mediumAlerts), fill: '#3b82f6' },
+      ],
+      totals: {
+        activeCentres,
+        camerasHealthy,
+        camerasTotal,
+        activeBatches: centres.length + 5,
+        openCases,
+        criticalAlerts,
+        offlineCentres,
+      },
+    })
+  }
   if (key === 'centres') return NextResponse.json(centres)
   if (key.startsWith('centres/') && !key.includes('/batches') && !key.includes('/inventory') && !key.includes('/cameras')) {
     return NextResponse.json(detail(key.split('/')[1]))
@@ -179,6 +208,41 @@ export async function POST(req: Request, { params }: RouteParams) {
   const p = (await params).path || []
   const key = p.join('/')
 
+  // ── Route: POST /api/centres (Add new centre or update existing) ──
+  if (key === 'centres') {
+    try {
+      const body = await req.json().catch(() => ({}))
+      const id = (body.id || `CTR-${String(centres.length + 1).padStart(3, '0')}`).toUpperCase().trim()
+      const existingIndex = centres.findIndex(c => c.id === id)
+
+      const newCentre = {
+        id,
+        name: body.name || `${body.district || 'New'} Skill Development Centre`,
+        state: body.state || 'Maharashtra',
+        district: body.district || 'Central',
+        status: (body.status || 'Compliant') as any,
+        score: Number(body.score) || 95,
+        attendanceMatch: Number(body.attendanceMatch) || 95,
+        infrastructureScore: Number(body.infrastructureScore) || 92,
+        openCases: Number(body.openCases) || 0,
+        camerasHealthy: Number(body.camerasHealthy) || Number(body.camerasTotal) || 3,
+        camerasTotal: Number(body.camerasTotal) || 3,
+        lastSync: 'Just now',
+        risk: (body.risk || 'Low') as any,
+      }
+
+      if (existingIndex >= 0) {
+        centres[existingIndex] = { ...centres[existingIndex], ...newCentre }
+      } else {
+        centres.unshift(newCentre)
+      }
+
+      return NextResponse.json({ ok: true, centre: newCentre })
+    } catch (err: any) {
+      return NextResponse.json({ ok: false, error: err.message }, { status: 400 })
+    }
+  }
+
   // ── Route: POST /api/v1/biometric/events ──
   if (key === 'v1/biometric/events') {
     try {
@@ -248,6 +312,75 @@ export async function POST(req: Request, { params }: RouteParams) {
 
       // Insert reconciliation into in-memory list so it is immediately visible in the UI
       reconciliations.unshift(analysisResult.reconciliation)
+
+      // Connect AI analysis result directly to Centre and Command Centre states
+      const targetCentreId = jobInput.centreId
+      const recon = analysisResult.reconciliation
+      const isDeficit = recon.status === 'REVIEW_REQUIRED'
+      const isCameraIssue = recon.status === 'CAMERA_UNHEALTHY'
+      const isUnverifiable = recon.status === 'UNVERIFIABLE'
+
+      const centreStatus = isDeficit ? 'Needs Review' : (isCameraIssue ? 'Camera Issue' : (isUnverifiable ? 'Unverifiable' : 'Compliant'))
+      const matchPct = Math.min(100, Math.round((recon.observedMedian / Math.max(1, recon.expectedPresent)) * 100))
+
+      let existingCentre = centres.find(c => c.id === targetCentreId)
+      if (existingCentre) {
+        existingCentre.status = centreStatus as any
+        existingCentre.attendanceMatch = matchPct
+        existingCentre.score = isDeficit ? Math.min(68, matchPct) : Math.max(88, matchPct)
+        existingCentre.lastSync = 'Just now'
+        if (isDeficit) existingCentre.openCases = (existingCentre.openCases || 0) + 1
+      } else {
+        const stateName = targetCentreId.includes('-DL-') ? 'Delhi' : (targetCentreId.includes('-MH-') ? 'Maharashtra' : 'Delhi')
+        const districtName = targetCentreId.includes('-DL-') ? 'New Delhi' : (targetCentreId.includes('-MH-') ? 'Pune' : 'Delhi')
+        const newCentre = {
+          id: targetCentreId,
+          name: recon.centreName || `${districtName} Skill Development Centre`,
+          state: stateName,
+          district: districtName,
+          status: centreStatus as any,
+          score: isDeficit ? Math.min(68, matchPct) : Math.max(88, matchPct),
+          attendanceMatch: matchPct,
+          infrastructureScore: 92,
+          openCases: isDeficit ? 1 : 0,
+          camerasHealthy: isCameraIssue ? 1 : 3,
+          camerasTotal: 3,
+          lastSync: 'Just now',
+          risk: (isDeficit ? 'High' : 'Low') as any,
+        }
+        centres.unshift(newCentre)
+      }
+
+      // If AI detects a deficit or camera issue, automatically generate a Case for Command Centre attention
+      if (isDeficit || isCameraIssue) {
+        const newCase = {
+          id: `CASE-${Date.now().toString().slice(-4)}`,
+          title: isDeficit
+            ? `Attendance variance detected (${recon.batchName})`
+            : `Camera signal exception (${targetCentreId})`,
+          category: (isDeficit ? 'attendance' : 'camera_health') as any,
+          severity: (isDeficit ? 'critical' : 'high') as any,
+          status: 'open' as any,
+          centreId: targetCentreId,
+          centreName: recon.centreName || existingCentre?.name || `${targetCentreId} Vocational Centre`,
+          state: existingCentre?.state || (targetCentreId.includes('-DL-') ? 'Delhi' : 'Maharashtra'),
+          district: existingCentre?.district || (targetCentreId.includes('-DL-') ? 'New Delhi' : 'Pune'),
+          roomName: recon.roomName || 'Classroom A',
+          batchName: recon.batchName,
+          expectedValue: recon.expectedPresent,
+          observedValue: recon.observedMedian,
+          confidence: recon.detectionConfidence || 0.85,
+          evidenceQuality: ((recon.cameraQualityScore || 1.0) > 0.7 ? 'high' : 'medium') as any,
+          triggerReason: isDeficit
+            ? `AI Model detected persistent deficit: ${recon.observedMedian} observed occupants against ${recon.expectedPresent} reported.`
+            : `Camera feed health score dropped to ${recon.cameraQualityScore || 0}.`,
+          createdAt: 'Just now',
+          updatedAt: new Date().toISOString(),
+          slaDueAt: new Date(Date.now() + 86400000).toISOString(),
+          evidenceIds: [`EV-${recon.id}`],
+        }
+        cases.unshift(newCase)
+      }
 
       return NextResponse.json(
         {

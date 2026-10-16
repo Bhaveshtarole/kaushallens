@@ -7,6 +7,7 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
 export const endpoints = {
   summary: () => api('/api/dashboard/summary'),
   centres: () => api('/api/centres'),
+  addCentre: (data: Record<string, any>) => api('/api/centres', { method: 'POST', body: JSON.stringify(data) }),
   centre: (id: string) => api(`/api/centres/${id}`),
   cases: () => api('/api/cases'),
   case: (id: string) => api(`/api/cases/${id}`),

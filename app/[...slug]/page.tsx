@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { Bell, ChevronRight, ChevronLeft, ChevronDown, CircleAlert, ClipboardCheck, CloudOff, FileBarChart, Gauge, LayoutDashboard, LayoutGrid, Home, Menu, Search, Settings, ShieldCheck, Video, X, Users, Activity, Download, ArrowRight, ArrowUpRight, Filter, RefreshCw, UserPlus, Trash2, MapPin, Building2, Fingerprint, Cpu, CheckCircle2, XCircle, AlertTriangle, Eye, Clock, Wifi, WifiOff, Send, Info } from 'lucide-react'
+import { Bell, ChevronRight, ChevronLeft, ChevronDown, CircleAlert, ClipboardCheck, CloudOff, FileBarChart, Gauge, LayoutDashboard, LayoutGrid, Home, Menu, Search, Settings, ShieldCheck, Video, X, Users, Activity, Download, ArrowRight, ArrowUpRight, Filter, RefreshCw, UserPlus, Trash2, MapPin, Building2, Fingerprint, Cpu, CheckCircle2, XCircle, AlertTriangle, Eye, Clock, Wifi, WifiOff, Send, Info, Plus } from 'lucide-react'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { endpoints } from '@/lib/api'
 import type { Centre, ComplianceCase, DashboardSummary, CentreDetail, AttendanceRecord, InventoryItem, Camera, AttendanceReconciliation, BiometricDevice, ReconciliationStatus } from '@/lib/types'
@@ -415,7 +415,383 @@ function Dashboard(){
     </Shell>
   );
 }
-function Centres(){const [data,setData]=useState<Centre[]>([]); const [q,setQ]=useState(''); useEffect(()=>{endpoints.centres().then(setData as any)},[]); const filtered=data.filter(c=>(c.name+c.state+c.district).toLowerCase().includes(q.toLowerCase())); return <Shell title="Centres"><div className="toolbar"><div className="search wide"><Search size={16}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search centre, state or district"/></div><div className="filters"><button className="filter">All statuses</button><button className="filter"><Filter size={14}/> Filters</button></div></div><section className="panel"><div className="table-meta"><span><b>{filtered.length}</b> centres in monitoring scope</span><span className="muted">Last sync 3 minutes ago</span></div><table><thead><tr><th>Centre</th><th>State / District</th><th>Status</th><th>Score</th><th>Open cases</th><th>Camera health</th><th>Last sync</th></tr></thead><tbody>{filtered.map(c=><tr key={c.id}><td><a className="table-link" href={`/centres/${c.id}`}>{c.name}</a><small>{c.id}</small></td><td>{c.state}<small>{c.district}</small></td><td><Badge>{c.status}</Badge></td><td><strong className={c.score<70?'score-low':''}>{c.score}/100</strong></td><td>{c.openCases||'—'}</td><td>{c.camerasHealthy}/{c.camerasTotal} healthy</td><td>{c.lastSync}</td></tr>)}</tbody></table></section></Shell>}
+function Centres() {
+  const [data, setData] = useState<Centre[]>([]);
+  const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [stateFilter, setStateFilter] = useState('All');
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const [form, setForm] = useState({
+    id: '',
+    name: '',
+    state: 'Maharashtra',
+    district: '',
+    camerasTotal: 3,
+    camerasHealthy: 3,
+    status: 'Compliant' as const,
+    score: 95,
+  });
+
+  const loadCentres = () => {
+    endpoints.centres().then(setData as any);
+  };
+
+  useEffect(() => {
+    loadCentres();
+  }, []);
+
+  const states = Array.from(new Set(data.map(c => c.state))).filter(Boolean);
+
+  const filtered = data.filter(c => {
+    const matchesQ = (c.name + ' ' + c.id + ' ' + c.state + ' ' + c.district).toLowerCase().includes(q.toLowerCase());
+    const matchesStatus = statusFilter === 'All' || c.status.toLowerCase() === statusFilter.toLowerCase();
+    const matchesState = stateFilter === 'All' || c.state === stateFilter;
+    return matchesQ && matchesStatus && matchesState;
+  });
+
+  const handleAddCentre = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.district.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      const generatedId = form.id.trim() || `TC-${form.state.slice(0, 2).toUpperCase()}-${String(Math.floor(1000 + Math.random() * 9000))}`;
+      await endpoints.addCentre({
+        ...form,
+        id: generatedId,
+        camerasHealthy: Number(form.camerasHealthy),
+        camerasTotal: Number(form.camerasTotal),
+        score: Number(form.score),
+      });
+
+      setToastMessage(`Centre "${form.name}" (${generatedId}) successfully added! Connected to Command Centre.`);
+      setTimeout(() => setToastMessage(null), 6000);
+      setIsAddOpen(false);
+      setForm({
+        id: '',
+        name: '',
+        state: 'Maharashtra',
+        district: '',
+        camerasTotal: 3,
+        camerasHealthy: 3,
+        status: 'Compliant',
+        score: 95,
+      });
+      loadCentres();
+    } catch (err: any) {
+      alert(`Error registering centre: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Shell title="Centres" crumb="Monitoring Scope / Centres">
+      {toastMessage && (
+        <div style={{
+          background: '#ecfdf5',
+          border: '1px solid #a7f3d0',
+          color: '#065f46',
+          borderRadius: 8,
+          padding: '12px 16px',
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: 13,
+          fontWeight: 600,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CheckCircle2 size={16} color="#059669" />
+            <span>{toastMessage}</span>
+          </div>
+          <button
+            onClick={() => setToastMessage(null)}
+            style={{ border: 0, background: 'none', color: '#065f46', cursor: 'pointer' }}
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      <div className="toolbar" style={{ alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, flex: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div className="search wide">
+            <Search size={16} />
+            <input
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Search centre, ID, state or district..."
+            />
+          </div>
+
+          {/* Status filter */}
+          <div className="form-select-control">
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              aria-label="Filter by status"
+            >
+              <option value="All">All statuses</option>
+              <option value="Compliant">Compliant</option>
+              <option value="Needs Review">Needs Review</option>
+              <option value="Camera Issue">Camera Issue</option>
+              <option value="Unverifiable">Unverifiable</option>
+            </select>
+            <ChevronDown size={14} className="select-caret" />
+          </div>
+
+          {/* State filter */}
+          <div className="form-select-control">
+            <span style={{ fontSize: 13 }}>🇮🇳</span>
+            <select
+              value={stateFilter}
+              onChange={e => setStateFilter(e.target.value)}
+              aria-label="Filter by state"
+            >
+              <option value="All">All States</option>
+              {states.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <ChevronDown size={14} className="select-caret" />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <Button onClick={() => setIsAddOpen(true)}>
+            <Plus size={16} data-icon="inline-start" /> Add Centre
+          </Button>
+        </div>
+      </div>
+
+      <section className="panel">
+        <div className="table-meta">
+          <span>
+            <b>{filtered.length}</b> centres in monitoring scope
+            {stateFilter !== 'All' && <span> in <b>{stateFilter}</b></span>}
+            {statusFilter !== 'All' && <span> with status <b>{statusFilter}</b></span>}
+          </span>
+          <span className="privacy-note">
+            <ShieldCheck size={14} /> Synced with Command Centre & Edge AI
+          </span>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Centre</th>
+              <th>State / District</th>
+              <th>Status</th>
+              <th>Score</th>
+              <th>Open cases</th>
+              <th>Camera health</th>
+              <th>Live footage</th>
+              <th>Last sync</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>
+                  No centres match the selected filter.
+                </td>
+              </tr>
+            ) : (
+              filtered.map(c => (
+                <tr key={c.id}>
+                  <td>
+                    <a className="table-link" href={`/centres/${c.id}`}>{c.name}</a>
+                    <small>{c.id}</small>
+                  </td>
+                  <td>
+                    {c.state}
+                    <small>{c.district}</small>
+                  </td>
+                  <td><Badge>{c.status}</Badge></td>
+                  <td>
+                    <strong className={c.score < 70 ? 'score-low' : ''}>
+                      {c.score}/100
+                    </strong>
+                  </td>
+                  <td>{c.openCases || '—'}</td>
+                  <td>{c.camerasHealthy}/{c.camerasTotal} healthy</td>
+                  <td>
+                    <a
+                      href={`/demo?centre=${encodeURIComponent(c.id)}`}
+                      className="more"
+                      style={{ fontWeight: 600, color: '#0b8f87' }}
+                    >
+                      <Video size={13} /> Monitor footage
+                    </a>
+                  </td>
+                  <td>{c.lastSync}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </section>
+
+      {/* Add Centre Modal Dialog */}
+      {isAddOpen && (
+        <div className="modal-overlay" onClick={() => !isSubmitting && setIsAddOpen(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3>Register New Skill Centre</h3>
+                <p>Onboard a training facility into the live MSDE KaushalLens network</p>
+              </div>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setIsAddOpen(false)}
+                disabled={isSubmitting}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddCentre}>
+              <div className="modal-body">
+                <div className="form-grid">
+                  <label>
+                    Centre ID (Optional)
+                    <input
+                      placeholder="e.g. TC-GJ-0089 (auto if empty)"
+                      value={form.id}
+                      onChange={e => setForm({ ...form, id: e.target.value.toUpperCase() })}
+                    />
+                  </label>
+                  <label>
+                    State *
+                    <select
+                      value={form.state}
+                      onChange={e => setForm({ ...form, state: e.target.value })}
+                      required
+                    >
+                      <option value="Gujarat">Gujarat</option>
+                      <option value="Maharashtra">Maharashtra</option>
+                      <option value="Delhi">Delhi</option>
+                      <option value="Karnataka">Karnataka</option>
+                      <option value="Uttar Pradesh">Uttar Pradesh</option>
+                      <option value="Rajasthan">Rajasthan</option>
+                      <option value="Tamil Nadu">Tamil Nadu</option>
+                      <option value="Madhya Pradesh">Madhya Pradesh</option>
+                      <option value="West Bengal">West Bengal</option>
+                      <option value="Bihar">Bihar</option>
+                      <option value="Punjab">Punjab</option>
+                      <option value="Haryana">Haryana</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="form-grid">
+                  <label>
+                    Centre Name *
+                    <input
+                      placeholder="e.g. Ahmedabad Advanced Tech Skills Hub"
+                      value={form.name}
+                      onChange={e => setForm({ ...form, name: e.target.value })}
+                      required
+                    />
+                  </label>
+                  <label>
+                    District *
+                    <input
+                      placeholder="e.g. Ahmedabad"
+                      value={form.district}
+                      onChange={e => setForm({ ...form, district: e.target.value })}
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div className="form-grid">
+                  <label>
+                    Total CCTV Cameras
+                    <input
+                      type="number"
+                      min={1}
+                      max={24}
+                      value={form.camerasTotal}
+                      onChange={e => {
+                        const tot = Number(e.target.value);
+                        setForm({
+                          ...form,
+                          camerasTotal: tot,
+                          camerasHealthy: Math.min(form.camerasHealthy, tot),
+                        });
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Healthy Cameras
+                    <input
+                      type="number"
+                      min={0}
+                      max={form.camerasTotal}
+                      value={form.camerasHealthy}
+                      onChange={e => setForm({ ...form, camerasHealthy: Number(e.target.value) })}
+                    />
+                  </label>
+                </div>
+
+                <div className="form-grid">
+                  <label>
+                    Initial Status
+                    <select
+                      value={form.status}
+                      onChange={e => setForm({ ...form, status: e.target.value as any })}
+                    >
+                      <option value="Compliant">Compliant</option>
+                      <option value="Needs Review">Needs Review</option>
+                      <option value="Camera Issue">Camera Issue</option>
+                      <option value="Unverifiable">Unverifiable</option>
+                    </select>
+                  </label>
+                  <label>
+                    Initial Compliance Score (0-100)
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={form.score}
+                      onChange={e => setForm({ ...form, score: Number(e.target.value) })}
+                    />
+                  </label>
+                </div>
+
+                <div className="privacy-banner" style={{ margin: 0 }}>
+                  <ShieldCheck size={18} />
+                  <div>
+                    <b>Instant Live Connectivity</b>
+                    <p>New centres are dynamically indexed across all Command Centre KPI aggregates, State filters, and Risk ranking queues.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsAddOpen(false)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Registering…' : 'Save & Register Centre'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </Shell>
+  );
+}
 function CentrePage({id}:{id:string}){const [d,setD]=useState<CentreDetail|null>(null); const [tab,setTab]=useState('Overview'); useEffect(()=>{endpoints.centre(id).then(setD as any)},[id]); if(!d)return <Shell title="Centre profile"><div className="loading">Loading centre profile...</div></Shell>; return <Shell title="Centre profile" crumb="Centres / Profile"><div className="profile-head"><div><div className="eyebrow">{d.id} · {d.state.toUpperCase()}</div><h2>{d.name}</h2><p className="muted">{d.address} · Centre manager: {d.manager}</p></div><Badge>{d.status}</Badge></div><div className="profile-score"><div><span>Compliance score</span><strong>{d.score}<small>/100</small></strong></div><div className="score-bar"><i style={{width:`${d.score}%`}}/></div><span className="muted">Based on latest verified observations</span></div><div className="tabs">{['Overview','Batches','Attendance','Infrastructure','Cameras','Cases','Audit history'].map(x=><button className={tab===x?'selected':''} onClick={()=>setTab(x)} key={x}>{x}</button>)}</div>{tab==='Infrastructure'?<section className="panel"><div className="panel-head"><div><h2>Expected vs observed inventory</h2><p>Unverifiable is not absent. Items with low evidence quality require manual review.</p></div></div><table><thead><tr><th>Item</th><th>Room</th><th>Expected</th><th>Observed</th><th>Assessment</th></tr></thead><tbody>{d.inventory.map((x,i)=><tr key={i}><td><b>{x.item}</b></td><td>{x.room}</td><td>{x.expected}</td><td>{x.observed}</td><td><Badge>{x.status}</Badge></td></tr>)}</tbody></table></section>:tab==='Cameras'?<div className="camera-grid">{d.cameras.map(c=><CameraCard key={c.id} camera={c}/>)}</div>:<div className="detail-grid"><section className="panel"><div className="panel-head"><div><h2>{tab==='Batches'?'Active batches':'Centre overview'}</h2><p>{tab==='Batches'?'Reported attendance and live occupancy':'Latest centre signals and operational summary'}</p></div></div>{tab==='Batches'?d.batches.map(b=><div className="batch-row" key={b.id}><div><b>{b.name} · {b.trade}</b><span>{b.schedule}</span></div><div><b>{b.observed}/{b.reported}</b><span>observed / reported</span></div><Badge>{b.status}</Badge></div>):<><div className="overview-grid"><Stat label="Active batches" value="3" sub="18 learners reporting" icon={Users}/><Stat label="Camera health" value={`${d.camerasHealthy}/${d.camerasTotal}`} sub="Latest device check" icon={Video}/><Stat label="Open cases" value={d.openCases} sub="Across all categories" icon={ClipboardCheck}/></div><div className="timeline">{d.timeline.map(x=><div key={x.date}><i className={`timeline-dot ${x.tone}`}/><div><b>{x.text}</b><span>{x.date}</span></div></div>)}</div></>}</section><section className="panel map-card"><div className="regional-map"><div className="map-grid"/><div className="map-pin p1"/><div className="map-pin p2"/><div className="map-pin p3"/></div><h3>Regional network</h3><p className="muted">Connected to the {d.state} monitoring region</p><div className="sync-line"><span className="dot"/> Edge device online <b>v2.8.4</b></div></section></div>}</Shell>}
 function CameraCard({camera}:{camera:Camera}){return <div className="camera-card"><div className={`camera-preview ${camera.status}`}><div className="scanline"/><span>{camera.status==='healthy'?`${camera.people} people detected`:`${camera.status.toUpperCase()}`}</span><small>{camera.room}</small></div><div className="camera-info"><div><b>{camera.id}</b><span>{camera.room} · Quality {camera.quality}%</span></div><Badge>{camera.status==='healthy'?'Healthy':'Camera unhealthy'}</Badge></div><div className="camera-foot"><span>Last sync {camera.lastSync}</span><button className="more">View evidence <ArrowUpRight size={13}/></button></div></div>}
 function Cases(){const [data,setData]=useState<ComplianceCase[]>([]);const [q,setQ]=useState('');useEffect(()=>{endpoints.cases().then(setData as any)},[]);const f=data.filter(c=>(c.id+c.title+c.centreName+c.category).toLowerCase().includes(q.toLowerCase()));return <Shell title="Case queue"><div className="toolbar"><div className="search wide"><Search size={16}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search case ID, centre or category"/></div><div className="filters"><button className="filter">All statuses</button><button className="filter">All severity</button></div></div><section className="panel"><div className="table-meta"><span><b>{f.length}</b> cases · Human review queue</span><span className="privacy-note"><ShieldCheck size={14}/> No identity data is collected</span></div><table><thead><tr><th>Case ID / issue</th><th>Severity</th><th>Category</th><th>Centre</th><th>Created</th><th>Assignee</th><th>Status</th></tr></thead><tbody>{f.map(c=><tr key={c.id}><td><a className="table-link" href={`/cases/${c.id}`}>{c.id}</a><small>{c.title}</small></td><td><Badge>{c.severity}</Badge></td><td className="capitalize">{c.category.replace('_',' ')}</td><td>{c.centreName}<small>{c.district}, {c.state}</small></td><td>{c.createdAt.slice(0,10)}</td><td>{c.assignedTo||<span className="muted">Unassigned</span>}</td><td><Badge>{c.status.replace('_',' ')}</Badge></td></tr>)}</tbody></table></section></Shell>}

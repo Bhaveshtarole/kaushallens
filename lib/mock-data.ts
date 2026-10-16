@@ -1,19 +1,34 @@
 import type { Centre, ComplianceCase, DashboardSummary, CentreDetail, AttendanceRecord, InventoryItem, Camera, Batch } from './types'
-const states = [['Maharashtra','Pune'],['Maharashtra','Nashik'],['Uttar Pradesh','Lucknow'],['Uttar Pradesh','Varanasi'],['Karnataka','Bengaluru'],['Karnataka','Mysuru'],['Rajasthan','Jaipur'],['Rajasthan','Kota'],['Assam','Guwahati'],['Tamil Nadu','Chennai'],['Tamil Nadu','Madurai'],['Maharashtra','Nagpur']]
-export const centres: Centre[] = states.map(([state,district],i)=>({
-  id:`CTR-${String(i+1).padStart(3,'0')}`,
-  name:`${district} Skill Development Centre`,
+const states = [
+  ['Delhi', 'New Delhi', 'TC-DL-0018', 'Delhi Skill Development Centre (Class One 720P)'],
+  ['Maharashtra', 'Pune', 'TC-MH-0042', 'Pune Vocational Training Centre'],
+  ['Maharashtra', 'Nashik', 'CTR-002', 'Nashik Skill Development Centre'],
+  ['Uttar Pradesh', 'Lucknow', 'CTR-003', 'Lucknow Skill Development Centre'],
+  ['Uttar Pradesh', 'Varanasi', 'CTR-004', 'Varanasi Skill Development Centre'],
+  ['Karnataka', 'Bengaluru', 'CTR-005', 'Bengaluru Skill Development Centre'],
+  ['Karnataka', 'Mysuru', 'CTR-006', 'Mysuru Skill Development Centre'],
+  ['Rajasthan', 'Jaipur', 'CTR-007', 'Jaipur Skill Development Centre'],
+  ['Rajasthan', 'Kota', 'CTR-008', 'Kota Skill Development Centre'],
+  ['Assam', 'Guwahati', 'CTR-009', 'Guwahati Skill Development Centre'],
+  ['Tamil Nadu', 'Chennai', 'CTR-010', 'Chennai Skill Development Centre'],
+  ['Tamil Nadu', 'Madurai', 'CTR-011', 'Madurai Skill Development Centre'],
+  ['Maharashtra', 'Nagpur', 'CTR-012', 'Nagpur Skill Development Centre'],
+]
+
+export const centres: Centre[] = states.map(([state, district, customId, customName], i) => ({
+  id: customId || `CTR-${String(i + 1).padStart(3, '0')}`,
+  name: customName || `${district} Skill Development Centre`,
   state,
   district,
-  status:(i===0?'Compliant':i===1?'Compliant':i===2?'Needs Review':i===5?'Camera Issue':i===8?'Unverifiable':'Compliant') as any,
-  score:[94,88,71,82,97,64,91,86,58,93,89,78][i],
-  attendanceMatch:[94,88,71,84,95,64,89,83,55,91,87,76][i],
-  infrastructureScore:[92,85,68,80,94,70,88,84,62,90,86,77][i],
-  openCases:[1,2,4,2,0,5,1,2,6,0,1,3][i],
-  camerasHealthy:[3,2,2,3,3,1,2,3,1,3,3,2][i],
-  camerasTotal:3,
-  lastSync:i===5?'38 min ago':'3 min ago',
-  risk:i===8?'High':i===5?'High':i===2?'Medium':'Low'
+  status: (i === 0 || i === 1 ? 'Compliant' : i === 3 ? 'Needs Review' : i === 6 ? 'Camera Issue' : i === 9 ? 'Unverifiable' : 'Compliant') as any,
+  score: [96, 94, 88, 71, 82, 97, 64, 91, 86, 58, 93, 89, 78][i] || 85,
+  attendanceMatch: [96, 94, 88, 71, 84, 95, 64, 89, 83, 55, 91, 87, 76][i] || 85,
+  infrastructureScore: [94, 92, 85, 68, 80, 94, 70, 88, 84, 62, 90, 86, 77][i] || 85,
+  openCases: [0, 0, 2, 4, 2, 0, 5, 1, 2, 6, 0, 1, 3][i] || 0,
+  camerasHealthy: [3, 3, 2, 2, 3, 3, 1, 2, 3, 1, 3, 3, 2][i] || 3,
+  camerasTotal: 3,
+  lastSync: 'Just now',
+  risk: (i === 9 ? 'High' : i === 6 ? 'High' : i === 3 ? 'Medium' : 'Low') as any,
 }))
 const categories=['attendance','infrastructure','camera_health','connectivity'] as const
 const titles=['Missing workbench observation','Camera obstruction detected','Low-light evidence needs review','Attendance variance detected','Edge device offline','Repeated infrastructure gap','Attendance verified — no action']
