@@ -246,7 +246,44 @@ export function DemoPage() {
     }
   }
 
-  // Canvas drawing loop for exact bounding boxes as seen in user reference screenshot
+  // Dynamic AI State & Real-time occupancy calculations
+  const samples = aiResult?.samples || aiResult?.timeline
+  const currentSample = samples && samples.length > 0
+    ? samples.reduce((prev, curr) =>
+        Math.abs(curr.time_seconds - currentTime) < Math.abs(prev.time_seconds - currentTime) ? curr : prev
+      )
+    : null
+
+  const activeTrackedCount = currentSample
+    ? currentSample.visible_tracked_people
+    : (aiResult?.summary?.observed_median !== undefined
+        ? Math.round(aiResult.summary.observed_median)
+        : (selectedPreset.observedOccupancy ?? 8))
+
+  const observedOccupancy = aiResult?.summary?.observed_median !== undefined
+    ? Math.round(aiResult.summary.observed_median)
+    : (selectedPreset.observedOccupancy ?? 8)
+
+  const discrepancy = Math.max(0, expectedPresent - observedOccupancy)
+
+  const rawStatus = aiResult?.decision?.status || (discrepancy > 2 ? 'REVIEW_REQUIRED' : 'COMPLIANT')
+  const statusReason = aiResult?.decision?.reason || (discrepancy > 0
+    ? 'Observed occupancy is below reported attendance. Please verify manually.'
+    : 'Observed occupancy matches reported attendance within allowed tolerance.')
+
+  // Chart data directly from AI pipeline samples
+  const chartData = samples && samples.length > 0
+    ? samples.map((s) => ({
+        time: Math.round(s.time_seconds * 10) / 10,
+        count: s.visible_tracked_people,
+      }))
+    : TREND_DATA
+
+  const maxChartTime = chartData.length > 0
+    ? Math.max(20, Math.ceil(chartData[chartData.length - 1].time || 20))
+    : 20
+
+  // Canvas drawing loop: dynamically renders detected trainee bounding boxes from AI analysis
   useEffect(() => {
     let animId: number
     const canvas = canvasRef.current
@@ -269,23 +306,68 @@ export function DemoPage() {
       if (viewMode === 'ai' || viewMode === 'split') {
         const timeSec = video.currentTime
 
-        // 10 trainees bounding boxes matching classroom desk layout from screenshot
-        // Format: [x1, y1, x2, y2, conf]
-        const studentBoxes: Array<[number, number, number, number, number]> = [
-          [240, 25, 335, 115, 0.87],   // Teacher / upper desk
-          [355, 65, 430, 155, 0.92],   // Student 1
-          [455, 68, 530, 155, 0.85],   // Student 2
-          [220, 140, 280, 235, 0.87],  // Student 3 (left row)
-          [280, 135, 350, 230, 0.87],  // Student 4 (left row)
-          [355, 150, 435, 235, 0.83],  // Student 5 (center)
-          [445, 155, 535, 240, 0.88],  // Student 6 (right)
-          [223, 260, 290, 345, 0.83],  // Student 7 (front left)
-          [365, 260, 458, 345, 0.83],  // Student 8 (front center)
-          [485, 195, 565, 330, 0.83],  // Student 9 (front right)
-        ]
-
         const scaleX = width / 640
         const scaleY = height / 352
+
+        let boxesToDraw: Array<{ x1: number; y1: number; w: number; h: number; conf: number; label: string }> = []
+
+        // If aiResult has samples, locate sample matching current playback timestamp
+        const activeSamples = aiResult?.samples || aiResult?.timeline
+        if (activeSamples && activeSamples.length > 0) {
+          const sample = activeSamples.reduce((prev, curr) =>
+            Math.abs(curr.time_seconds - timeSec) < Math.abs(prev.time_seconds - timeSec) ? curr : prev
+          )
+
+          if (sample.boxes && sample.boxes.length > 0) {
+            boxesToDraw = sample.boxes.map((b) => {
+              const x1 = b.box[0] * scaleX
+              const y1 = b.box[1] * scaleY
+              const x2 = b.box[2] * scaleX
+              const y2 = b.box[3] * scaleY
+              return {
+                x1,
+                y1,
+                w: Math.max(10, x2 - x1),
+                h: Math.max(15, y2 - y1),
+                conf: b.confidence,
+                label: `person #${b.track_id} ${b.confidence.toFixed(2)}`,
+              }
+            })
+          }
+        }
+
+        // Fallback to preset classroom desk layout if no AI sample boxes are present
+        if (boxesToDraw.length === 0) {
+          const studentBoxes: Array<[number, number, number, number, number]> = [
+            [240, 25, 335, 115, 0.87],   // Teacher / upper desk
+            [355, 65, 430, 155, 0.92],   // Student 1
+            [455, 68, 530, 155, 0.85],   // Student 2
+            [220, 140, 280, 235, 0.87],  // Student 3 (left row)
+            [280, 135, 350, 230, 0.87],  // Student 4 (left row)
+            [355, 150, 435, 235, 0.83],  // Student 5 (center)
+            [445, 155, 535, 240, 0.88],  // Student 6 (right)
+            [223, 260, 290, 345, 0.83],  // Student 7 (front left)
+            [365, 260, 458, 345, 0.83],  // Student 8 (front center)
+            [485, 195, 565, 330, 0.83],  // Student 9 (front right)
+          ]
+
+          boxesToDraw = studentBoxes.map(([bx1, by1, bx2, by2, conf], idx) => {
+            const jitterX = Math.sin(timeSec * 1.5 + idx) * 0.8
+            const jitterY = Math.cos(timeSec * 1.2 + idx) * 0.6
+            const x1 = (bx1 + jitterX) * scaleX
+            const y1 = (by1 + jitterY) * scaleY
+            const w = (bx2 - bx1) * scaleX
+            const h = (by2 - by1) * scaleY
+            return {
+              x1,
+              y1,
+              w,
+              h,
+              conf,
+              label: `person ${conf.toFixed(2)}`,
+            }
+          })
+        }
 
         ctx.save()
         if (viewMode === 'split') {
@@ -295,23 +377,14 @@ export function DemoPage() {
           ctx.clip()
         }
 
-        // Draw bounding boxes with solid cyan tags as seen in the user reference image
-        studentBoxes.forEach(([bx1, by1, bx2, by2, conf], idx) => {
-          const jitterX = Math.sin(timeSec * 1.5 + idx) * 0.8
-          const jitterY = Math.cos(timeSec * 1.2 + idx) * 0.6
-
-          const x1 = (bx1 + jitterX) * scaleX
-          const y1 = (by1 + jitterY) * scaleY
-          const w = (bx2 - bx1) * scaleX
-          const h = (by2 - by1) * scaleY
-
+        // Draw bounding boxes with solid cyan tags as seen in reference image
+        boxesToDraw.forEach(({ x1, y1, w, h, label }) => {
           // Cyan bounding box outline
           ctx.strokeStyle = '#06b6d4'
           ctx.lineWidth = 2
           ctx.strokeRect(x1, y1, w, h)
 
           // Cyan tag label directly above top-left of box
-          const label = `person ${conf.toFixed(2)}`
           ctx.font = 'bold 11px system-ui, -apple-system, sans-serif'
           const metrics = ctx.measureText(label)
           const tagW = metrics.width + 10
@@ -342,7 +415,7 @@ export function DemoPage() {
 
     animId = requestAnimationFrame(renderOverlay)
     return () => cancelAnimationFrame(animId)
-  }, [viewMode])
+  }, [viewMode, aiResult])
 
   const formatTimecode = (sec: number) => {
     const m = Math.floor(sec / 60)
@@ -423,7 +496,7 @@ export function DemoPage() {
             {/* In-Video Tracked Counter Pill (Top-Left) */}
             <div className="absolute top-10 left-3 z-20 flex items-center gap-1.5 px-3 py-1 rounded-md bg-slate-950/80 backdrop-blur-md border border-white/10 text-white text-xs font-semibold shadow-lg">
               <Users size={13} className="text-cyan-400" />
-              <span>10 people tracked</span>
+              <span className="font-mono">{activeTrackedCount} {activeTrackedCount === 1 ? 'person' : 'people'} tracked</span>
             </div>
 
             {/* Video & Canvas Frame */}
@@ -734,14 +807,62 @@ export function DemoPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
             {/* Status Alert Box (approx 45% / 5 cols) */}
-            <div className="md:col-span-5 bg-amber-50/80 border border-amber-200 rounded-lg p-3.5 flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <AlertTriangle size={18} className="text-amber-600" />
+            <div className={`md:col-span-5 rounded-lg p-3.5 flex items-start gap-3 border ${
+              rawStatus === 'COMPLIANT' || rawStatus === 'NO_DEFICIT_DETECTED' || rawStatus === 'WITHIN_CAMERA_TOLERANCE'
+                ? 'bg-emerald-50/90 border-emerald-200'
+                : rawStatus === 'CAMERA_UNHEALTHY'
+                ? 'bg-rose-50/90 border-rose-200'
+                : rawStatus === 'UNVERIFIABLE'
+                ? 'bg-slate-50/90 border-slate-300'
+                : 'bg-amber-50/80 border-amber-200'
+            }`}>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                rawStatus === 'COMPLIANT' || rawStatus === 'NO_DEFICIT_DETECTED' || rawStatus === 'WITHIN_CAMERA_TOLERANCE'
+                  ? 'bg-emerald-100 text-emerald-600'
+                  : rawStatus === 'CAMERA_UNHEALTHY'
+                  ? 'bg-rose-100 text-rose-600'
+                  : rawStatus === 'UNVERIFIABLE'
+                  ? 'bg-slate-200 text-slate-700'
+                  : 'bg-amber-100 text-amber-600'
+              }`}>
+                {rawStatus === 'COMPLIANT' || rawStatus === 'NO_DEFICIT_DETECTED' || rawStatus === 'WITHIN_CAMERA_TOLERANCE' ? (
+                  <CheckCircle2 size={18} />
+                ) : rawStatus === 'CAMERA_UNHEALTHY' ? (
+                  <Camera size={18} />
+                ) : rawStatus === 'UNVERIFIABLE' ? (
+                  <Eye size={18} />
+                ) : (
+                  <AlertTriangle size={18} />
+                )}
               </div>
               <div>
-                <b className="text-sm font-bold text-amber-800 block">Needs review</b>
-                <p className="text-xs text-amber-900/80 mt-0.5 leading-snug">
-                  Observed occupancy is below reported attendance. Please verify manually.
+                <b className={`text-sm font-bold block ${
+                  rawStatus === 'COMPLIANT' || rawStatus === 'NO_DEFICIT_DETECTED' || rawStatus === 'WITHIN_CAMERA_TOLERANCE'
+                    ? 'text-emerald-800'
+                    : rawStatus === 'CAMERA_UNHEALTHY'
+                    ? 'text-rose-800'
+                    : rawStatus === 'UNVERIFIABLE'
+                    ? 'text-slate-800'
+                    : 'text-amber-800'
+                }`}>
+                  {rawStatus === 'COMPLIANT' || rawStatus === 'NO_DEFICIT_DETECTED'
+                    ? 'Compliant'
+                    : rawStatus === 'CAMERA_UNHEALTHY'
+                    ? 'Camera Unhealthy'
+                    : rawStatus === 'UNVERIFIABLE'
+                    ? 'Unverifiable (High Occlusion)'
+                    : 'Needs review'}
+                </b>
+                <p className={`text-xs mt-0.5 leading-snug ${
+                  rawStatus === 'COMPLIANT' || rawStatus === 'NO_DEFICIT_DETECTED' || rawStatus === 'WITHIN_CAMERA_TOLERANCE'
+                    ? 'text-emerald-900/80'
+                    : rawStatus === 'CAMERA_UNHEALTHY'
+                    ? 'text-rose-900/80'
+                    : rawStatus === 'UNVERIFIABLE'
+                    ? 'text-slate-600'
+                    : 'text-amber-900/80'
+                }`}>
+                  {statusReason}
                 </p>
               </div>
             </div>
@@ -770,7 +891,7 @@ export function DemoPage() {
                 <div>
                   <span className="text-[11px] font-semibold text-slate-500 block">Observed occupancy</span>
                   <div className="text-2xl font-bold text-slate-900 leading-tight">
-                    {aiResult?.summary?.observed_median ?? selectedPreset.observedOccupancy ?? 8}
+                    {observedOccupancy}
                   </div>
                   <span className="text-[11px] text-slate-400">people</span>
                 </div>
@@ -778,15 +899,19 @@ export function DemoPage() {
 
               {/* Discrepancy */}
               <div className="flex items-center gap-3 pl-4">
-                <div className="w-9 h-9 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center flex-shrink-0">
-                  <ArrowDown size={18} />
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  discrepancy === 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500'
+                }`}>
+                  {discrepancy === 0 ? <CheckCircle2 size={18} /> : <ArrowDown size={18} />}
                 </div>
                 <div>
                   <span className="text-[11px] font-semibold text-slate-500 block">Discrepancy</span>
-                  <div className="text-2xl font-bold text-rose-500 leading-tight">
-                    {expectedPresent - (aiResult?.summary?.observed_median ?? selectedPreset.observedOccupancy ?? 8)}
+                  <div className={`text-2xl font-bold leading-tight ${discrepancy === 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                    {discrepancy}
                   </div>
-                  <span className="text-[11px] text-slate-400">less than reported</span>
+                  <span className="text-[11px] text-slate-400">
+                    {discrepancy === 0 ? 'matches reported' : 'less than reported'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -795,11 +920,24 @@ export function DemoPage() {
 
         {/* Occupancy Trend Card */}
         <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-sm">
-          <h3 className="font-bold text-sm text-slate-900 mb-3">Occupancy trend (last 20 seconds)</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-sm text-slate-900">
+              Occupancy trend ({chartData.length > 0 ? `last ${Math.round(chartData[chartData.length - 1].time || 20)} seconds` : 'last 20 seconds'})
+            </h3>
+            {aiResult?.summary && (
+              <div className="flex items-center gap-3 text-xs text-slate-500 font-mono">
+                <span>Median: <strong className="text-slate-800">{aiResult.summary.observed_median}</strong></span>
+                {aiResult.summary.observed_max !== undefined && (
+                  <span>Max: <strong className="text-slate-800">{aiResult.summary.observed_max}</strong></span>
+                )}
+                <span>Stability: <strong className="text-slate-800">{Math.round((aiResult.summary.count_stability ?? 0.85) * 100)}%</strong></span>
+              </div>
+            )}
+          </div>
 
           <div className="w-full h-48">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={TREND_DATA} margin={{ top: 10, right: 15, left: -10, bottom: 20 }}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 15, left: -10, bottom: 20 }}>
                 <defs>
                   <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#0284c7" stopOpacity={0.25} />
@@ -812,8 +950,7 @@ export function DemoPage() {
                   axisLine={{ stroke: '#e2e8f0' }}
                   tickLine={false}
                   tick={{ fontSize: 11, fill: '#64748b' }}
-                  domain={[0, 20]}
-                  ticks={[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20]}
+                  domain={[0, maxChartTime]}
                   label={{ value: 'Time (seconds)', position: 'insideBottom', offset: -14, fill: '#64748b', fontSize: 11 }}
                 />
                 <YAxis

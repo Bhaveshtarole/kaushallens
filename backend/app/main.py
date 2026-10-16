@@ -17,10 +17,10 @@ settings.storage_dir.mkdir(parents=True, exist_ok=True)
 app = FastAPI(title="SkillGuard Local AI", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
