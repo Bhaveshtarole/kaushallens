@@ -37,6 +37,7 @@ interface SampleVideoPreset {
   sub: string
   durationText: string
   videoUrl: string
+  analysisUrl?: string
   centreId: string
   batchId: string
   expectedPresent: number
@@ -46,16 +47,30 @@ interface SampleVideoPreset {
 
 const SAMPLE_PRESETS: SampleVideoPreset[] = [
   {
+    id: 'class-one-720p',
+    title: 'Class One 720P',
+    sub: 'TC-DL-0018 · 22s 720P HD',
+    durationText: '00:22',
+    videoUrl: '/demo/classroom_cctv_class_one_720p.mp4',
+    analysisUrl: '/demo/classroom_cctv_class_one_720p_analysis.json',
+    centreId: 'TC-DL-0018',
+    batchId: 'BATCH-CLASS-ONE',
+    expectedPresent: 15,
+    observedOccupancy: 14,
+    discrepancy: 1,
+  },
+  {
     id: 'classroom-feed',
     title: 'Classroom feed',
     sub: 'TC-MH-0042 · 20s clip',
     durationText: '00:20',
     videoUrl: '/demo/classroom_real_cctv_20s.mp4',
+    analysisUrl: '/demo/real_cctv_analysis.json',
     centreId: 'TC-MH-0042',
     batchId: 'BATCH-DEMO-101',
     expectedPresent: 13,
-    observedOccupancy: 8,
-    discrepancy: 5,
+    observedOccupancy: 17,
+    discrepancy: 0,
   },
   {
     id: 'full-stream',
@@ -63,11 +78,12 @@ const SAMPLE_PRESETS: SampleVideoPreset[] = [
     sub: 'TC-MH-0042 · 2.5 min',
     durationText: '02:30',
     videoUrl: '/demo/classroom_real_cctv.mp4',
+    analysisUrl: '/demo/real_cctv_analysis.json',
     centreId: 'TC-MH-0042',
     batchId: 'BATCH-DEMO-101',
     expectedPresent: 13,
-    observedOccupancy: 8,
-    discrepancy: 5,
+    observedOccupancy: 17,
+    discrepancy: 0,
   },
   {
     id: 'rapid-check',
@@ -75,11 +91,12 @@ const SAMPLE_PRESETS: SampleVideoPreset[] = [
     sub: 'TC-MH-0042 · 30s',
     durationText: '00:30',
     videoUrl: '/demo/classroom_real_cctv_30s.mp4',
+    analysisUrl: '/demo/real_cctv_analysis.json',
     centreId: 'TC-MH-0042',
     batchId: 'BATCH-DEMO-101',
     expectedPresent: 13,
-    observedOccupancy: 8,
-    discrepancy: 5,
+    observedOccupancy: 17,
+    discrepancy: 0,
   },
   {
     id: 'alternate-angle',
@@ -87,11 +104,12 @@ const SAMPLE_PRESETS: SampleVideoPreset[] = [
     sub: 'TC-MH-0042 · 20s',
     durationText: '00:20',
     videoUrl: '/demo/classroom_real_cctv_alt20s.mp4',
+    analysisUrl: '/demo/real_cctv_analysis.json',
     centreId: 'TC-MH-0042',
     batchId: 'BATCH-DEMO-101',
     expectedPresent: 13,
-    observedOccupancy: 8,
-    discrepancy: 5,
+    observedOccupancy: 17,
+    discrepancy: 0,
   },
 ]
 
@@ -237,6 +255,17 @@ export function DemoPage() {
     setExpectedPresent(preset.expectedPresent)
     setCurrentTime(0)
 
+    if (preset.analysisUrl) {
+      try {
+        const res = await fetch(preset.analysisUrl)
+        if (res.ok) {
+          const data = await res.json()
+          setAiResult(data)
+          return
+        }
+      } catch {}
+    }
+
     // Instantly trigger backend AI model analysis for the newly selected video
     runAnalysis(preset.videoUrl, preset.centreId, preset.batchId, preset.expectedPresent)
   }
@@ -248,15 +277,16 @@ export function DemoPage() {
     }
   }
 
-  // Automatically analyze current video on initial load
+  // Automatically load initial preset video analysis
   useEffect(() => {
-    fetch('/demo/real_cctv_analysis.json')
+    const initUrl = selectedPreset.analysisUrl || '/demo/classroom_cctv_class_one_720p_analysis.json'
+    fetch(initUrl)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data) setAiResult(data)
       })
       .catch(() => {})
-  }, [])
+  }, [selectedPreset.analysisUrl])
 
   // Handle local video upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -331,8 +361,16 @@ export function DemoPage() {
       if (viewMode === 'ai' || viewMode === 'split') {
         const timeSec = video.currentTime
 
-        const baseW = aiResult?.video_metadata?.width || 640
-        const baseH = aiResult?.video_metadata?.height || 352
+        // Parse resolution from video metadata if available (e.g. 1280x720 or 640x352)
+        let baseW = video.videoWidth || 640
+        let baseH = video.videoHeight || 352
+        if (aiResult?.video?.resolution) {
+          const parts = aiResult.video.resolution.split('x').map(Number)
+          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[0] > 0 && parts[1] > 0) {
+            baseW = parts[0]
+            baseH = parts[1]
+          }
+        }
         const scaleX = width / baseW
         const scaleY = height / baseH
 
