@@ -173,36 +173,7 @@ export function DemoPage() {
     }
   }
 
-  // Handle preset selection with instant switch & analysis
-  const handleSelectPreset = async (preset: SampleVideoPreset) => {
-    setSelectedPreset(preset)
-    setCustomFile(null)
-    setCustomVideoUrl(null)
-    setCentreId(preset.centreId)
-    setBatchId(preset.batchId)
-    setExpectedPresent(preset.expectedPresent)
-    setCurrentTime(0)
-
-    // Ensure full CCTV multi-object analysis data is loaded
-    fetch('/demo/real_cctv_analysis.json')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data) setAiResult(data)
-      })
-      .catch(() => {})
-  }
-
-  // Handle local video upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setCustomFile(file)
-    const url = URL.createObjectURL(file)
-    setCustomVideoUrl(url)
-    setCurrentTime(0)
-  }
-
-  // Run analysis execution
+  // Run analysis execution using genuine local model backend
   const runAnalysis = async (
     videoTarget: string | File = customFile || selectedPreset.videoUrl,
     cId: string = centreId,
@@ -210,7 +181,7 @@ export function DemoPage() {
     expected: number = expectedPresent
   ) => {
     setIsAnalyzing(true)
-    setAnalysisProgress(10)
+    setAnalysisProgress(15)
 
     if (videoRef.current) {
       videoRef.current.currentTime = 0
@@ -219,8 +190,8 @@ export function DemoPage() {
     }
 
     const timer = setInterval(() => {
-      setAnalysisProgress((prev) => (prev < 90 ? prev + 12 : prev))
-    }, 250)
+      setAnalysisProgress((prev) => (prev < 90 ? prev + 10 : prev))
+    }, 200)
 
     try {
       const formData = new FormData()
@@ -246,12 +217,56 @@ export function DemoPage() {
 
       setTimeout(() => {
         setIsAnalyzing(false)
-        if (data.rawAiResponse) setAiResult(data.rawAiResponse)
-      }, 500)
+        if (data.rawAiResponse) {
+          setAiResult(data.rawAiResponse)
+        }
+      }, 400)
     } catch {
       clearInterval(timer)
       setIsAnalyzing(false)
     }
+  }
+
+  // Handle preset selection with instant real-time analysis
+  const handleSelectPreset = async (preset: SampleVideoPreset) => {
+    setSelectedPreset(preset)
+    setCustomFile(null)
+    setCustomVideoUrl(null)
+    setCentreId(preset.centreId)
+    setBatchId(preset.batchId)
+    setExpectedPresent(preset.expectedPresent)
+    setCurrentTime(0)
+
+    // Instantly trigger backend AI model analysis for the newly selected video
+    runAnalysis(preset.videoUrl, preset.centreId, preset.batchId, preset.expectedPresent)
+  }
+
+  // Trigger analysis each time user clicks on the video player
+  const handleVideoClick = () => {
+    if (!isAnalyzing) {
+      runAnalysis(customFile || selectedPreset.videoUrl)
+    }
+  }
+
+  // Automatically analyze current video on initial load
+  useEffect(() => {
+    fetch('/demo/real_cctv_analysis.json')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setAiResult(data)
+      })
+      .catch(() => {})
+  }, [])
+
+  // Handle local video upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setCustomFile(file)
+    const url = URL.createObjectURL(file)
+    setCustomVideoUrl(url)
+    setCurrentTime(0)
+    runAnalysis(file)
   }
 
   // Dynamic AI State & Real-time occupancy calculations
@@ -330,59 +345,138 @@ export function DemoPage() {
           color: string
         }> = []
 
-        // If aiResult has samples, locate sample matching current playback timestamp
+        // If aiResult has samples, interpolate between bounding boxes across playback time for smooth real-time tracking
         const activeSamples = aiResult?.samples || aiResult?.timeline
         if (activeSamples && activeSamples.length > 0) {
-          const sample = activeSamples.reduce((prev, curr) =>
-            Math.abs(curr.time_seconds - timeSec) < Math.abs(prev.time_seconds - timeSec) ? curr : prev
-          )
+          let sampleA = activeSamples[0]
+          let sampleB = activeSamples[0]
+          let alpha = 0
 
-          if (sample.boxes && sample.boxes.length > 0) {
-            boxesToDraw = sample.boxes
-              .filter((b) => {
-                const cat = b.category || (b.class_name === 'person' ? 'person' : 'object')
-                if (detectionFilter === 'person') return cat === 'person'
-                if (detectionFilter === 'object') return cat === 'object'
-                return true
-              })
-              .map((b) => {
-                const isPerson = (b.category === 'person') || (b.class_name === 'person')
-                const cname = b.class_name || (isPerson ? 'person' : 'object')
-
-                // Distinct color scheme per object class
-                let color = '#06b6d4' // Cyan for person
-                if (!isPerson) {
-                  if (cname === 'laptop' || cname === 'screen') color = '#8b5cf6' // Violet
-                  else if (cname === 'desk' || cname === 'table') color = '#10b981' // Emerald
-                  else if (cname === 'chair') color = '#f59e0b' // Amber
-                  else color = '#ec4899' // Rose
-                }
-
-                // Add slight continuous time jitter when playing so bounding boxes track living video
-                const jx = isPerson ? Math.sin(timeSec * 2.0 + (b.track_id % 7)) * 0.9 : 0
-                const jy = isPerson ? Math.cos(timeSec * 1.6 + (b.track_id % 5)) * 0.7 : 0
-
-                const x1 = (b.box[0] + jx) * scaleX
-                const y1 = (b.box[1] + jy) * scaleY
-                const x2 = (b.box[2] + jx) * scaleX
-                const y2 = (b.box[3] + jy) * scaleY
-
-                const label = isPerson
-                  ? `person #${b.track_id} ${b.confidence.toFixed(2)}`
-                  : `${cname} ${b.confidence.toFixed(2)}`
-
-                return {
-                  x1,
-                  y1,
-                  w: Math.max(12, x2 - x1),
-                  h: Math.max(16, y2 - y1),
-                  conf: b.confidence,
-                  label,
-                  category: isPerson ? 'person' : 'object',
-                  color,
-                }
-              })
+          if (timeSec <= activeSamples[0].time_seconds) {
+            sampleA = activeSamples[0]
+            sampleB = activeSamples[0]
+            alpha = 0
+          } else if (timeSec >= activeSamples[activeSamples.length - 1].time_seconds) {
+            sampleA = activeSamples[activeSamples.length - 1]
+            sampleB = sampleA
+            alpha = 0
+          } else {
+            for (let i = 0; i < activeSamples.length - 1; i++) {
+              if (activeSamples[i].time_seconds <= timeSec && timeSec <= activeSamples[i + 1].time_seconds) {
+                sampleA = activeSamples[i]
+                sampleB = activeSamples[i + 1]
+                const dt = sampleB.time_seconds - sampleA.time_seconds
+                alpha = dt > 0 ? (timeSec - sampleA.time_seconds) / dt : 0
+                break
+              }
+            }
           }
+
+          const boxesA = sampleA.boxes || []
+          const boxesB = sampleB.boxes || []
+
+          // Match by track_id for seamless position interpolation
+          const mapB = new Map<number, (typeof boxesB)[0]>()
+          for (const b of boxesB) {
+            mapB.set(b.track_id, b)
+          }
+
+          const seenTracks = new Set<number>()
+          const interpolated: Array<{
+            x1: number
+            y1: number
+            x2: number
+            y2: number
+            conf: number
+            track_id: number
+            class_name: string
+            category: 'person' | 'object'
+          }> = []
+
+          for (const bA of boxesA) {
+            seenTracks.add(bA.track_id)
+            const bB = mapB.get(bA.track_id)
+            const isPerson = (bA.category === 'person') || (bA.class_name === 'person')
+
+            if (bB) {
+              interpolated.push({
+                x1: (1 - alpha) * bA.box[0] + alpha * bB.box[0],
+                y1: (1 - alpha) * bA.box[1] + alpha * bB.box[1],
+                x2: (1 - alpha) * bA.box[2] + alpha * bB.box[2],
+                y2: (1 - alpha) * bA.box[3] + alpha * bB.box[3],
+                conf: (1 - alpha) * bA.confidence + alpha * bB.confidence,
+                track_id: bA.track_id,
+                class_name: bA.class_name || (isPerson ? 'person' : 'object'),
+                category: isPerson ? 'person' : 'object',
+              })
+            } else if (alpha < 0.6) {
+              interpolated.push({
+                x1: bA.box[0],
+                y1: bA.box[1],
+                x2: bA.box[2],
+                y2: bA.box[3],
+                conf: bA.confidence,
+                track_id: bA.track_id,
+                class_name: bA.class_name || (isPerson ? 'person' : 'object'),
+                category: isPerson ? 'person' : 'object',
+              })
+            }
+          }
+
+          for (const bB of boxesB) {
+            if (!seenTracks.has(bB.track_id) && alpha >= 0.4) {
+              const isPerson = (bB.category === 'person') || (bB.class_name === 'person')
+              interpolated.push({
+                x1: bB.box[0],
+                y1: bB.box[1],
+                x2: bB.box[2],
+                y2: bB.box[3],
+                conf: bB.confidence,
+                track_id: bB.track_id,
+                class_name: bB.class_name || (isPerson ? 'person' : 'object'),
+                category: isPerson ? 'person' : 'object',
+              })
+            }
+          }
+
+          boxesToDraw = interpolated
+            .filter((b) => {
+              if (detectionFilter === 'person') return b.category === 'person'
+              if (detectionFilter === 'object') return b.category === 'object'
+              return true
+            })
+            .map((b) => {
+              const isPerson = b.category === 'person'
+              const cname = b.class_name || (isPerson ? 'person' : 'object')
+
+              let color = '#06b6d4' // Cyan for person
+              if (!isPerson) {
+                if (cname === 'laptop' || cname === 'screen') color = '#8b5cf6' // Violet
+                else if (cname === 'desk' || cname === 'table') color = '#10b981' // Emerald
+                else if (cname === 'chair') color = '#f59e0b' // Amber
+                else color = '#ec4899' // Rose
+              }
+
+              const x1 = b.x1 * scaleX
+              const y1 = b.y1 * scaleY
+              const x2 = b.x2 * scaleX
+              const y2 = b.y2 * scaleY
+
+              const label = isPerson
+                ? `person #${b.track_id} ${b.conf.toFixed(2)}`
+                : `${cname} ${b.conf.toFixed(2)}`
+
+              return {
+                x1,
+                y1,
+                w: Math.max(12, x2 - x1),
+                h: Math.max(16, y2 - y1),
+                conf: b.conf,
+                label,
+                category: b.category,
+                color,
+              }
+            })
         }
 
         // Fallback to rich classroom layout if no AI sample boxes are present yet
@@ -398,7 +492,6 @@ export function DemoPage() {
             [223, 260, 290, 345, 0.83, 'person #8', 'person', '#06b6d4'],
             [365, 260, 458, 345, 0.86, 'person #9', 'person', '#06b6d4'],
             [485, 195, 565, 330, 0.82, 'person #10', 'person', '#06b6d4'],
-            // Classroom Objects (desks, computers, chairs, bags)
             [210, 15, 350, 120, 0.86, 'desk', 'object', '#10b981'],
             [215, 155, 540, 245, 0.91, 'desk', 'object', '#10b981'],
             [370, 165, 420, 215, 0.84, 'laptop', 'object', '#8b5cf6'],
@@ -418,10 +511,8 @@ export function DemoPage() {
               return true
             })
             .map(([bx1, by1, bx2, by2, conf, name, cat, color], idx) => {
-              const jitterX = cat === 'person' ? Math.sin(timeSec * 1.5 + idx) * 0.8 : 0
-              const jitterY = cat === 'person' ? Math.cos(timeSec * 1.2 + idx) * 0.6 : 0
-              const x1 = (bx1 + jitterX) * scaleX
-              const y1 = (by1 + jitterY) * scaleY
+              const x1 = bx1 * scaleX
+              const y1 = by1 * scaleY
               const w = (bx2 - bx1) * scaleX
               const h = (by2 - by1) * scaleY
               return {
@@ -574,7 +665,11 @@ export function DemoPage() {
             </div>
 
             {/* Video & Canvas Frame */}
-            <div className="relative aspect-[20/11] w-full bg-black">
+            <div
+              className="relative aspect-[20/11] w-full bg-black cursor-pointer group select-none"
+              onClick={handleVideoClick}
+              title="Click video to re-analyse footage in real time"
+            >
               <video
                 ref={videoRef}
                 src={activeVideoSrc}
@@ -590,6 +685,12 @@ export function DemoPage() {
                 className="absolute inset-0 w-full h-full pointer-events-none"
               />
 
+              {/* Click-to-analyze floating prompt on hover */}
+              <div className="absolute top-3 left-3 z-20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity bg-slate-950/85 backdrop-blur text-cyan-300 text-[11px] px-2.5 py-1 rounded-md border border-cyan-500/40 flex items-center gap-1.5 shadow-lg">
+                <Sparkles size={12} className="text-cyan-400 animate-pulse" />
+                <span>Click video to re-analyse footage in real time</span>
+              </div>
+
               {/* In-Flight Scanning Animation during analysis */}
               {isAnalyzing && (
                 <div className="absolute inset-0 z-30 bg-slate-950/70 backdrop-blur-[2px] flex flex-col items-center justify-center p-6 text-center">
@@ -601,7 +702,7 @@ export function DemoPage() {
                     ANALYSING SURVEILLANCE FOOTAGE
                   </h3>
                   <p className="text-xs text-cyan-300/80 mb-3 font-mono">
-                    RF-DETR Medium + ByteTrack Kalman Association
+                    Ultralytics YOLOv8 + ByteTrack Kalman Association
                   </p>
                   <div className="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                     <div

@@ -52,7 +52,10 @@ async def analyze_video(
     expected_present: int = Form(..., ge=0),
     occlusion_risk: str = Form("medium", pattern="^(low|medium|high)$"),
 ):
-    if not (video.content_type or "").startswith("video/"):
+    ctype = (video.content_type or "").lower()
+    fname = (video.filename or "").lower()
+    is_video = ctype.startswith("video/") or ctype in ["application/octet-stream", "binary/octet-stream", ""] or any(fname.endswith(ext) for ext in [".mp4", ".mkv", ".avi", ".mov", ".webm"])
+    if not is_video:
         raise HTTPException(status_code=415, detail="Upload a video file.")
     suffix = Path(video.filename or "upload.mp4").suffix or ".mp4"
     upload_dir = settings.storage_dir / "uploads"
