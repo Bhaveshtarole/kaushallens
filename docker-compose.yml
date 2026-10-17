@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # ── Python FastAPI AI Microservice ──
+  ai-backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: skillguard-ai-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - SKILLGUARD_DEVICE=cpu
+      - SKILLGUARD_CONFIDENCE_THRESHOLD=0.35
+      - SKILLGUARD_NMS_IOU_THRESHOLD=0.70
+      - SKILLGUARD_SAMPLE_EVERY_SECONDS=0.5
+      - SKILLGUARD_WINDOW_SECONDS=10
+      - SKILLGUARD_TOLERANCE_PERCENT=0.20
+      - SKILLGUARD_TOLERANCE_MIN_PEOPLE=2
+      - SKILLGUARD_STORAGE_DIR=storage
+      - SKILLGUARD_ALLOWED_ORIGINS=*
+    volumes:
+      - ai-storage:/app/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── Next.js Web Application & Command Centre ──
+  web-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kaushallens-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - SKILLGUARD_AI_BASE_URL=http://ai-backend:8000
+      - SKILLGUARD_AI_ENABLED=true
+    depends_on:
+      ai-backend:
+        condition: service_healthy
+
+volumes:
+  ai-storage:
+    driver: local
