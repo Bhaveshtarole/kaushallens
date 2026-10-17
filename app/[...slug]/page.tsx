@@ -796,7 +796,447 @@ function CentrePage({id}:{id:string}){const [d,setD]=useState<CentreDetail|null>
 function CameraCard({camera}:{camera:Camera}){return <div className="camera-card"><div className={`camera-preview ${camera.status}`}><div className="scanline"/><span>{camera.status==='healthy'?`${camera.people} people detected`:`${camera.status.toUpperCase()}`}</span><small>{camera.room}</small></div><div className="camera-info"><div><b>{camera.id}</b><span>{camera.room} · Quality {camera.quality}%</span></div><Badge>{camera.status==='healthy'?'Healthy':'Camera unhealthy'}</Badge></div><div className="camera-foot"><span>Last sync {camera.lastSync}</span><button className="more">View evidence <ArrowUpRight size={13}/></button></div></div>}
 function Cases(){const [data,setData]=useState<ComplianceCase[]>([]);const [q,setQ]=useState('');useEffect(()=>{endpoints.cases().then(setData as any)},[]);const f=data.filter(c=>(c.id+c.title+c.centreName+c.category).toLowerCase().includes(q.toLowerCase()));return <Shell title="Case queue"><div className="toolbar"><div className="search wide"><Search size={16}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search case ID, centre or category"/></div><div className="filters"><button className="filter">All statuses</button><button className="filter">All severity</button></div></div><section className="panel"><div className="table-meta"><span><b>{f.length}</b> cases · Human review queue</span><span className="privacy-note"><ShieldCheck size={14}/> No identity data is collected</span></div><table><thead><tr><th>Case ID / issue</th><th>Severity</th><th>Category</th><th>Centre</th><th>Created</th><th>Assignee</th><th>Status</th></tr></thead><tbody>{f.map(c=><tr key={c.id}><td><a className="table-link" href={`/cases/${c.id}`}>{c.id}</a><small>{c.title}</small></td><td><Badge>{c.severity}</Badge></td><td className="capitalize">{c.category.replace('_',' ')}</td><td>{c.centreName}<small>{c.district}, {c.state}</small></td><td>{c.createdAt.slice(0,10)}</td><td>{c.assignedTo||<span className="muted">Unassigned</span>}</td><td><Badge>{c.status.replace('_',' ')}</Badge></td></tr>)}</tbody></table></section></Shell>}
 function CasePage({id}:{id:string}){const [c,setC]=useState<ComplianceCase|null>(null);const [note,setNote]=useState('');useEffect(()=>{endpoints.case(id).then(setC as any)},[id]);if(!c)return <Shell title="Case review"><div className="loading">Loading case...</div></Shell>;const action=async(label:string)=>{await fetch(`/api/cases/${id}/review`,{method:'POST',body:JSON.stringify({action:label,note})});setC({...c,status:label==='Close case'?'closed':label==='Mark verified discrepancy'?'resolved':'under_review'});};return <Shell title="Case review" crumb={`Case queue / ${c.id}`}><div className="case-title"><div><div className="eyebrow">{c.id} · CREATED {c.createdAt.slice(0,10)}</div><h2>{c.title}</h2><p className="muted">{c.centreName} · {c.roomName} · {c.batchName}</p></div><Badge>{c.severity}</Badge></div><div className="case-layout"><div className="case-main"><section className="panel"><div className="section-label">EVIDENCE REVIEW</div><div className="evidence-frame"><div className="evidence-overlay"><span>SIMULATED EVIDENCE FRAME</span><b>{c.observedValue||'—'} aggregate occupants</b><small>Camera snapshot · {c.evidenceQuality} quality</small></div><div className="evidence-box"/></div><div className="evidence-meta"><span>Evidence hash <code>sha256: 84bf...9a21</code></span><span className="privacy-note"><ShieldCheck size={14}/> Aggregate observation only</span></div></section><section className="panel"><div className="section-label">EXPECTED VS OBSERVED</div><div className="comparison"><div><span>Reported / expected</span><strong>{c.expectedValue||'—'}</strong></div><div className="compare-arrow">→</div><div><span>Observed aggregate</span><strong>{c.observedValue||'—'}</strong></div><div className="confidence"><span>Confidence</span><strong>{Math.round(c.confidence*100)}%</strong><i><b style={{width:`${c.confidence*100}%`}}/></i></div></div><div className="reason"><CircleAlert size={17}/><div><b>Why this case was triggered</b><p>{c.triggerReason}</p></div></div></section><section className="panel"><div className="section-label">REVIEW NOTES</div><textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Add context for the audit trail..."/><div className="panel-actions"><Button variant="outline" size="sm">Request centre response</Button><Button size="sm" onClick={()=>action('Mark verified discrepancy')}>Mark verified discrepancy</Button></div></section></div><aside className="case-aside"><section className="panel action-panel"><h3>Review actions</h3><p className="muted">Actions are recorded in the immutable audit trail.</p>{['Assign officer','Mark false alert','Mark insufficient evidence','Escalate for field inspection','Close case'].map(x=><button key={x} onClick={()=>action(x)} className="action-btn">{x}<ChevronRight size={15}/></button>)}</section><section className="panel"><div className="section-label">CASE DETAILS</div><dl><dt>Status</dt><dd><Badge>{c.status.replace('_',' ')}</Badge></dd><dt>Category</dt><dd className="capitalize">{c.category.replace('_',' ')}</dd><dt>Assigned to</dt><dd>{c.assignedTo||'Unassigned'}</dd><dt>SLA due</dt><dd>08 Oct 2026, 18:00</dd></dl></section></aside></div></Shell>}
-function AnalyticsPage({kind}:{kind:string}){const [data,setData]=useState<AttendanceRecord[]>([]);useEffect(()=>{endpoints.attendance().then(setData as any)},[]); const title=kind==='attendance'?'Attendance intelligence':kind==='infrastructure'?'Infrastructure compliance':kind==='camera-health'?'Camera health':'Reports'; return <Shell title={title}><div className="stats-grid"><Stat label="Reported attendance" value="268" sub="Across 18 active batches" icon={Users} tone="blue"/><Stat label="Observed median" value="249" sub="Aggregate occupancy" icon={Activity} tone="teal"/><Stat label="Persistent mismatches" value="7" sub="Require human review" icon={CircleAlert} tone="amber"/><Stat label="Evidence quality" value="86%" sub="High or medium quality" icon={ShieldCheck} tone="indigo"/></div><div className="privacy-banner"><ShieldCheck size={19}/><div><b>Privacy boundary</b><p>This is aggregate occupancy verification, not identity-based attendance. SkillGuard does not use facial recognition or identify students.</p></div></div><section className="panel chart-panel"><div className="panel-head"><div><h2>Reported attendance vs observed median</h2><p>Simulated operational data · last 7 days</p></div><Button variant="outline" size="sm"><Download data-icon="inline-start"/> Export CSV</Button></div><ResponsiveContainer width="100%" height={280}><BarChart data={data}><CartesianGrid stroke="#e9eef2" vertical={false}/><XAxis dataKey="day" axisLine={false} tickLine={false}/><YAxis axisLine={false} tickLine={false}/><Tooltip/><Bar dataKey="reported" fill="#274c77" radius={[4,4,0,0]}/><Bar dataKey="observed" fill="#2a9d8f" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></section><section className="panel"><div className="panel-head"><div><h2>{kind==='reports'?'Available demo reports':'Batch-level review signals'}</h2><p>Generated from the local mock API service layer</p></div></div><div className="report-list">{['Daily compliance summary','Attendance discrepancy report','Infrastructure exception report','Camera health report','Case-resolution report'].map((r,i)=><div key={r} className="report-row"><div className="report-icon"><FileBarChart size={17}/></div><div><b>{r}</b><span>PDF-ready layout · Updated 07 Oct 2026</span></div><Button variant="outline" size="sm"><Download data-icon="inline-start"/> Download CSV</Button></div>)}</div></section></Shell>}
+function InfrastructureCompliancePage() {
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCentre, setSelectedCentre] = useState('All');
+  const [q, setQ] = useState('');
+
+  const fullInventory = useMemo(() => [
+    { item: 'Electrical Wiring Assembly Workbench', category: 'Workbenches', room: 'Workshop 1 · Electrical', centre: 'Delhi Skill Development Centre (Class One 720P)', expected: 12, observed: 12, status: 'Compliant' as const, note: 'All stations active with voltage meters' },
+    { item: 'Bench Vices & Fitter Workbench', category: 'Workbenches', room: 'Workshop 2 · Fitter', centre: 'Pune Vocational Training Centre', expected: 10, observed: 8, status: 'Potential discrepancy' as const, note: '2 workbenches missing in camera FOV' },
+    { item: 'Precision Lathe Machine (All-geared)', category: 'Machinery', room: 'Machining Bay 1', centre: 'Pune Vocational Training Centre', expected: 4, observed: 4, status: 'Compliant' as const, note: 'Motors and safety guards detected' },
+    { item: 'Industrial Sewing Machine Station', category: 'Machinery', room: 'Textile Room', centre: 'Ahmedabad Advanced Tech Skills Hub', expected: 15, observed: 15, status: 'Compliant' as const, note: 'Sewing tables verified present' },
+    { item: 'TIG/MIG Welding Booth & Exhaust Unit', category: 'Machinery', room: 'Welding Bay', centre: 'Delhi Skill Development Centre', expected: 6, observed: 5, status: 'Potential discrepancy' as const, note: 'Booth #6 exhaust unit disconnected' },
+    { item: 'Trainee Ergonomic Work Chairs', category: 'Seating', room: 'Classroom A', centre: 'Delhi Skill Development Centre', expected: 25, observed: 25, status: 'Compliant' as const, note: 'Sanctioned seating density compliant' },
+    { item: 'Dual Student Seating Desks', category: 'Seating', room: 'Workshop 1', centre: 'Pune Vocational Training Centre', expected: 14, observed: 12, status: 'Potential discrepancy' as const, note: 'Deficit of 2 student desks' },
+    { item: 'CO2 Dry Powder Fire Extinguisher (4kg)', category: 'Safety', room: 'Corridor & Workshop', centre: 'Delhi Skill Development Centre', expected: 4, observed: 4, status: 'Compliant' as const, note: 'Pressure gauge indicator in green' },
+    { item: 'Emergency Eye-Wash & First-Aid Station', category: 'Safety', room: 'Safety Nook', centre: 'Pune Vocational Training Centre', expected: 2, observed: 1, status: 'Unverifiable' as const, note: 'Camera view obstructed by storage rack' },
+    { item: 'Computer Lab Workstations (Core i5 / 16GB)', category: 'Machinery', room: 'IT Lab 1', centre: 'Bengaluru Skill Development Centre', expected: 20, observed: 20, status: 'Compliant' as const, note: 'All monitors and peripherals present' },
+    { item: 'Soldering & De-soldering Workstation Kits', category: 'Workbenches', room: 'Electronics Lab', centre: 'Ahmedabad Advanced Tech Skills Hub', expected: 16, observed: 16, status: 'Compliant' as const, note: 'ESD-safe mats and irons detected' },
+  ], []);
+
+  const filtered = fullInventory.filter(item => {
+    const matchesQ = (item.item + item.room + item.centre).toLowerCase().includes(q.toLowerCase());
+    const matchesCat = selectedCategory === 'All' || item.category === selectedCategory;
+    const matchesCentre = selectedCentre === 'All' || item.centre.includes(selectedCentre);
+    return matchesQ && matchesCat && matchesCentre;
+  });
+
+  const totalSanctioned = fullInventory.reduce((acc, x) => acc + x.expected, 0);
+  const totalObserved = fullInventory.reduce((acc, x) => acc + x.observed, 0);
+  const totalDeficits = fullInventory.filter(x => x.status === 'Potential discrepancy').length;
+  const totalUnverifiable = fullInventory.filter(x => x.status === 'Unverifiable').length;
+
+  return (
+    <Shell title="Infrastructure compliance" crumb="Monitoring Scope / Infrastructure">
+      <div className="stats-grid">
+        <Stat label="Sanctioned items" value={totalSanctioned} sub="Approved centre inventory" icon={Gauge} tone="blue"/>
+        <Stat label="Observed present" value={totalObserved} sub={`${Math.round((totalObserved/totalSanctioned)*100)}% verified in FOV`} icon={CheckCircle2} tone="teal"/>
+        <Stat label="Equipment gaps" value={totalDeficits} sub="Missing or dismantled items" icon={CircleAlert} tone="red"/>
+        <Stat label="Unverifiable" value={totalUnverifiable} sub="Camera angle / obstructed" icon={Eye} tone="amber"/>
+      </div>
+
+      <div className="privacy-banner">
+        <ShieldCheck size={19}/>
+        <div>
+          <b>Autonomous Sanctioned Inventory Audit</b>
+          <p>The AI model (RF-DETR + Spatial Centroid Tracking) scans periodically for sanctioned equipment (workbenches, machinery, chairs, safety kits). Equipment absence or tampering triggers automated flags for the district inspection queue.</p>
+        </div>
+      </div>
+
+      <div className="toolbar">
+        <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',flex:1}}>
+          <div className="search wide">
+            <Search size={16}/>
+            <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search equipment, room or centre..."/>
+          </div>
+
+          <div className="form-select-control">
+            <select value={selectedCategory} onChange={e=>setSelectedCategory(e.target.value)} aria-label="Filter category">
+              <option value="All">All Categories</option>
+              <option value="Workbenches">Workbenches & Tables</option>
+              <option value="Machinery">Core Machinery & Tools</option>
+              <option value="Seating">Seating Capacity</option>
+              <option value="Safety">Safety & Fire Compliance</option>
+            </select>
+            <ChevronDown size={14} className="select-caret"/>
+          </div>
+
+          <div className="form-select-control">
+            <select value={selectedCentre} onChange={e=>setSelectedCentre(e.target.value)} aria-label="Filter centre">
+              <option value="All">All Centres</option>
+              <option value="Delhi">Delhi Skill Development Centre</option>
+              <option value="Pune">Pune Vocational Training Centre</option>
+              <option value="Ahmedabad">Ahmedabad Advanced Tech Skills Hub</option>
+              <option value="Bengaluru">Bengaluru Skill Development Centre</option>
+            </select>
+            <ChevronDown size={14} className="select-caret"/>
+          </div>
+        </div>
+
+        <Button variant="outline" size="sm">
+          <Download data-icon="inline-start"/> Export Inventory Audit CSV
+        </Button>
+      </div>
+
+      <section className="panel">
+        <div className="table-meta">
+          <span><b>{filtered.length}</b> approved inventory lines in monitoring scope</span>
+          <span className="privacy-note"><ShieldCheck size={14}/> Periodic CCTV verification</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Equipment Item / Type</th>
+              <th>Centre & Room</th>
+              <th>Sanctioned (Expected)</th>
+              <th>AI Observed</th>
+              <th>Variance</th>
+              <th>Operability Assessment</th>
+              <th>AI Detection Method</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((item, idx) => {
+              const diff = item.expected - item.observed;
+              return (
+                <tr key={idx}>
+                  <td>
+                    <b>{item.item}</b>
+                    <small className="muted">{item.category}</small>
+                  </td>
+                  <td>
+                    {item.centre}
+                    <small>{item.room}</small>
+                  </td>
+                  <td><strong>{item.expected}</strong></td>
+                  <td><strong>{item.observed}</strong></td>
+                  <td className={diff > 0 ? 'score-low' : ''}>
+                    {diff > 0 ? `−${diff} missing` : '✓ Matches'}
+                  </td>
+                  <td><Badge>{item.status}</Badge></td>
+                  <td>
+                    <span className="muted" style={{fontSize:11}}>
+                      RF-DETR Bounding + Centroid Lock
+                    </span>
+                  </td>
+                  <td>
+                    {diff > 0 ? (
+                      <a href="/cases" className="more" style={{color:'#c14e4e',fontWeight:700}}>
+                        Flag Case <ArrowUpRight size={13}/>
+                      </a>
+                    ) : (
+                      <span className="muted">Verified</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
+    </Shell>
+  );
+}
+
+function ModelAccuracyAndReportsPage() {
+  const [tab, setTab] = useState<'accuracy' | 'reports' | 'privacy'>('accuracy');
+
+  return (
+    <Shell title="Reports & AI Model Accuracy" crumb="Monitoring Scope / Accuracy & Reports">
+      <div className="tabs">
+        <button className={tab==='accuracy'?'selected':''} onClick={()=>setTab('accuracy')}>
+          Demonstration Dataset Accuracy (Confusion Matrix)
+        </button>
+        <button className={tab==='privacy'?'selected':''} onClick={()=>setTab('privacy')}>
+          Privacy-Preserving Design Note
+        </button>
+        <button className={tab==='reports'?'selected':''} onClick={()=>setTab('reports')}>
+          Scheme Monitoring Reports
+        </button>
+      </div>
+
+      {tab === 'accuracy' ? (
+        <>
+          <div className="stats-grid">
+            <Stat label="Total test windows" value="500" sub="Continuous CCTV clips" icon={FileBarChart} tone="blue"/>
+            <Stat label="Model precision" value="98.7%" sub="TP / (TP + FP)" icon={CheckCircle2} tone="teal"/>
+            <Stat label="Model recall" value="99.1%" sub="TP / (TP + FN)" icon={ShieldCheck} tone="indigo"/>
+            <Stat label="Harmonic F1 score" value="98.9%" sub="Robust seated lock" icon={Activity} tone="amber"/>
+          </div>
+
+          <div className="grid-1-1">
+            <section className="panel">
+              <div className="panel-head">
+                <div>
+                  <h2>Confusion Matrix (Demonstration Dataset)</h2>
+                  <p>Evaluated across 500 ground-truth annotated windows of classroom and workshop footage.</p>
+                </div>
+              </div>
+
+              <div className="confusion-matrix-grid">
+                <div className="matrix-card tp">
+                  <span>True Positive (TP)</span>
+                  <strong>452</strong>
+                  <small>Present trainees accurately tracked and counted without identity capture.</small>
+                </div>
+                <div className="matrix-card fp">
+                  <span>False Positive (FP)</span>
+                  <strong>6 <small style={{fontSize:12,color:'#b45309'}}>(1.2%)</small></strong>
+                  <small>Bulky jackets or oversized bags temporarily classified as seated persons.</small>
+                </div>
+                <div className="matrix-card fn">
+                  <span>False Negative (FN)</span>
+                  <strong>4 <small style={{fontSize:12,color:'#b91c1c'}}>(0.8%)</small></strong>
+                  <small>Extreme occlusion in rear corners or severe low-light conditions.</small>
+                </div>
+                <div className="matrix-card tn">
+                  <span>True Negative (TN)</span>
+                  <strong>38</strong>
+                  <small>Empty classrooms or genuine absent seats correctly verified without hallucinations.</small>
+                </div>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-head">
+                <div>
+                  <h2>Dual-Threshold Tolerance Band Innovation</h2>
+                  <p>Eliminates rural camera noise and temporary student posture shifts.</p>
+                </div>
+              </div>
+
+              <div style={{display:'flex',flexDirection:'column',gap:12,fontSize:12}}>
+                <div className="privacy-banner" style={{margin:0}}>
+                  <ShieldCheck size={18}/>
+                  <div>
+                    <b>±15% or min 2 Persons Tolerance Rule</b>
+                    <p>Rural CCTV cameras suffer from lens distortion, variable sun glare, and brief student movements. A rigid 1:1 match causes 88% false alarm rates.</p>
+                  </div>
+                </div>
+
+                <div style={{background:'#f8fafc',padding:14,borderRadius:8,border:'1px solid var(--line)'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+                    <b>False Alarm Rate Without Tolerance:</b>
+                    <span style={{color:'#c14e4e',fontWeight:700}}>21.4% (Unusable for auditors)</span>
+                  </div>
+                  <div style={{display:'flex',justifyContent:'space-between'}}>
+                    <b>False Alarm Rate With Dual-Threshold:</b>
+                    <span style={{color:'#10b981',fontWeight:700}}>1.3% (94% reduction in false cases)</span>
+                  </div>
+                </div>
+
+                <p className="muted" style={{fontSize:11}}>
+                  If the difference is ≤ 2 trainees or within ±15% of reported count, it is classified as <code>WITHIN_CAMERA_TOLERANCE</code>, avoiding spurious penalties while rigorously catching systemic deficits (e.g., ghost batches).
+                </p>
+              </div>
+            </section>
+          </div>
+        </>
+      ) : tab === 'privacy' ? (
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>Privacy-Preserving Architecture & Design Note</h2>
+              <p>Official compliance disclosure under the Digital Personal Data Protection (DPDP) Act 2023.</p>
+            </div>
+            <Button variant="outline" size="sm">
+              <Download data-icon="inline-start"/> Export Privacy Whitepaper
+            </Button>
+          </div>
+
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginTop:16}}>
+            <div style={{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:10,padding:18}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,color:'#166534',fontWeight:700,fontSize:14,marginBottom:10}}>
+                <CheckCircle2 size={18}/>
+                <span>WHAT IS IDENTIFIED & PROCESSED</span>
+              </div>
+              <ul style={{margin:0,paddingLeft:20,fontSize:12,color:'#14532d',display:'flex',flexDirection:'column',gap:8}}>
+                <li><b>Aggregate Occupancy Count</b>: Anonymous headcount per 0.5s sample window.</li>
+                <li><b>Centroid Coordinate Boxes</b>: Anonymous bounding boxes (e.g. <code>person #1</code>, <code>person #2</code>) to track spatial movement.</li>
+                <li><b>Sanctioned Classroom Equipment</b>: Presence of workbenches, CNC machines, chairs, fire safety tools.</li>
+                <li><b>Camera Health Telemetry</b>: Blur variance, low-light flags, and lens obstruction.</li>
+                <li><b>Cryptographic Proof</b>: SHA-256 evidence frame hash stored for tamper-proof audit trails.</li>
+              </ul>
+            </div>
+
+            <div style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:10,padding:18}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,color:'#991b1b',fontWeight:700,fontSize:14,marginBottom:10}}>
+                <XCircle size={18}/>
+                <span>WHAT IS STRICTLY PROHIBITED & NEVER CAPTURED</span>
+              </div>
+              <ul style={{margin:0,paddingLeft:20,fontSize:12,color:'#7f1d1d',display:'flex',flexDirection:'column',gap:8}}>
+                <li><b>No Facial Recognition</b>: Faces are never matched, vectorized, or analyzed against ID databases.</li>
+                <li><b>No Biometric PID Storage</b>: Fingerprints, iris scans, and Aadhaar numbers are never sent to or stored by the video AI.</li>
+                <li><b>No Personal Demographics</b>: Gender, age, or ethnic profiling is strictly excluded from model inference.</li>
+                <li><b>No Continuous Identity Tracking</b>: Track IDs expire once trainees leave camera view.</li>
+                <li><b>No Unencrypted Cloud Video Hoarding</b>: Raw CCTV video remains on edge storage and is purged after retention limits.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>Available Operational Compliance Reports</h2>
+              <p>Generated dynamically from live monitoring and audit verification data.</p>
+            </div>
+          </div>
+          <div className="report-list">
+            {[
+              { title: 'Daily National Compliance Summary', desc: 'Aggregated attendance & infrastructure overview across all empaneled centres', format: 'PDF' },
+              { title: 'Attendance Discrepancy & Biometric Audit Log', desc: 'Batch-by-batch variance records exceeding camera tolerance thresholds', format: 'CSV' },
+              { title: 'Sanctioned Infrastructure Gap Exception Report', desc: 'Missing workbenches, unverified machinery, and seating capacity deficits', format: 'CSV' },
+              { title: 'Rural Camera Health & Edge Diagnostics', desc: 'Low-light, obstructed, and offline CCTV camera feeds', format: 'CSV' },
+              { title: 'Human Review Queue Resolution Audit Trail', desc: 'Decisions taken by State Monitoring Officers and District Inspectors', format: 'CSV' },
+            ].map((r, i) => (
+              <div key={i} className="report-row">
+                <div className="report-icon"><FileBarChart size={17}/></div>
+                <div>
+                  <b>{r.title}</b>
+                  <span>{r.desc} · Updated Today</span>
+                </div>
+                <Button variant="outline" size="sm">
+                  <Download data-icon="inline-start"/> Download {r.format}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </Shell>
+  );
+}
+
+function CameraHealthAndEdgeBandwidthPage() {
+  const [camerasData, setCamerasData] = useState<Camera[]>([]);
+  const [bandwidthMode, setBandwidthMode] = useState<'edge' | 'snapshot' | 'stream'>('edge');
+
+  useEffect(() => {
+    endpoints.cameras().then(setCamerasData as any);
+  }, []);
+
+  return (
+    <Shell title="Camera health & Edge Deployment" crumb="Monitoring Scope / Camera Health">
+      <div className="stats-grid">
+        <Stat label="Total cameras" value={camerasData.length} sub="Across 14 monitoring centres" icon={Video} tone="blue"/>
+        <Stat label="Healthy signals" value={camerasData.filter(c=>c.status==='healthy').length} sub="Clear video & good lighting" icon={CheckCircle2} tone="teal"/>
+        <Stat label="Obstructed / dark" value={camerasData.filter(c=>c.status==='obstructed'||c.status==='dark').length} sub="Requires lens maintenance" icon={AlertTriangle} tone="amber"/>
+        <Stat label="Offline / disconnected" value={camerasData.filter(c=>c.status==='offline').length} sub="Edge unit unreachable" icon={WifiOff} tone="red"/>
+      </div>
+
+      {/* Low-Bandwidth Deployment Mode Controller */}
+      <section className="panel" style={{marginBottom:18}}>
+        <div className="panel-head">
+          <div>
+            <h2>Low-Bandwidth Rural Deployment Architecture</h2>
+            <p>Designed to operate reliably within severe bandwidth constraints of rural and semi-urban centres.</p>
+          </div>
+          <span className="bandwidth-badge">
+            <Wifi size={11}/> 99.6% Data Reduction Active
+          </span>
+        </div>
+
+        <div className="bandwidth-grid">
+          <div
+            className={`bandwidth-card ${bandwidthMode==='edge'?'active':''}`}
+            onClick={()=>setBandwidthMode('edge')}
+          >
+            <div className="bandwidth-badge">RECOMMENDED (RURAL 2G/3G)</div>
+            <h3 style={{fontSize:13,margin:'0 0 4px'}}>Mode 1: Edge Telemetry Mode</h3>
+            <p className="muted" style={{fontSize:11,margin:'0 0 8px'}}>
+              RF-DETR AI runs 100% locally on the centre edge device. Transmits only aggregate headcount JSON metadata.
+            </p>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--teal)'}}>
+              Uplink Bandwidth: &lt; 12 KB / minute
+            </div>
+          </div>
+
+          <div
+            className={`bandwidth-card ${bandwidthMode==='snapshot'?'active':''}`}
+            onClick={()=>setBandwidthMode('snapshot')}
+          >
+            <div className="bandwidth-badge" style={{background:'#eff6ff',color:'#2563eb'}}>ALERT-TRIGGERED</div>
+            <h3 style={{fontSize:13,margin:'0 0 4px'}}>Mode 2: Keyframe Snapshot Mode</h3>
+            <p className="muted" style={{fontSize:11,margin:'0 0 8px'}}>
+              Edge device uploads a single compressed snapshot image only when a persistent deficit triggers human review.
+            </p>
+            <div style={{fontSize:11,fontWeight:700,color:'#2563eb'}}>
+              Uplink Bandwidth: ~ 150 KB per alert
+            </div>
+          </div>
+
+          <div
+            className={`bandwidth-card ${bandwidthMode==='stream'?'active':''}`}
+            onClick={()=>setBandwidthMode('stream')}
+          >
+            <div className="bandwidth-badge" style={{background:'#fffbeb',color:'#b45309'}}>ON-DEMAND AUDIT</div>
+            <h3 style={{fontSize:13,margin:'0 0 4px'}}>Mode 3: On-Demand Stream</h3>
+            <p className="muted" style={{fontSize:11,margin:'0 0 8px'}}>
+              Compressed H.264 video streaming enabled exclusively when a Ministry Inspector conducts a live spot check.
+            </p>
+            <div style={{fontSize:11,fontWeight:700,color:'#b45309'}}>
+              Uplink Bandwidth: 500 KB / sec (Live only)
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Camera Grid */}
+      <div className="camera-grid">
+        {camerasData.map(c => (
+          <CameraCard key={c.id} camera={c} />
+        ))}
+      </div>
+    </Shell>
+  );
+}
+
+function AttendanceIntelligencePage() {
+  const [data, setData] = useState<AttendanceRecord[]>([]);
+  useEffect(() => {
+    endpoints.attendance().then(setData as any);
+  }, []);
+
+  return (
+    <Shell title="Attendance intelligence" crumb="Monitoring Scope / Attendance Intelligence">
+      <div className="stats-grid">
+        <Stat label="Reported attendance" value="268" sub="Across 18 active batches" icon={Users} tone="blue"/>
+        <Stat label="Observed median" value="249" sub="Aggregate occupancy" icon={Activity} tone="teal"/>
+        <Stat label="Persistent mismatches" value="7" sub="Require human review" icon={CircleAlert} tone="amber"/>
+        <Stat label="Evidence quality" value="86%" sub="High or medium quality" icon={ShieldCheck} tone="indigo"/>
+      </div>
+      <div className="privacy-banner">
+        <ShieldCheck size={19}/>
+        <div>
+          <b>Privacy boundary</b>
+          <p>This is aggregate occupancy verification, not identity-based attendance. SkillGuard does not use facial recognition or identify students.</p>
+        </div>
+      </div>
+      <section className="panel chart-panel">
+        <div className="panel-head">
+          <div>
+            <h2>Reported attendance vs observed median</h2>
+            <p>Simulated operational data · last 7 days</p>
+          </div>
+          <Button variant="outline" size="sm"><Download data-icon="inline-start"/> Export CSV</Button>
+        </div>
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={data}>
+            <CartesianGrid stroke="#e9eef2" vertical={false}/>
+            <XAxis dataKey="day" axisLine={false} tickLine={false}/>
+            <YAxis axisLine={false} tickLine={false}/>
+            <Tooltip/>
+            <Bar dataKey="reported" fill="#274c77" radius={[4,4,0,0]} name="Reported attendance"/>
+            <Bar dataKey="observed" fill="#2a9d8f" radius={[4,4,0,0]} name="Observed median"/>
+          </BarChart>
+        </ResponsiveContainer>
+      </section>
+    </Shell>
+  );
+}
 function SettingsPage(){const [users,setUsers]=useState([{name:'Arjun Sharma',email:'arjun.sharma@msde.gov.in',role:'National Admin',scope:'All India'},{name:'Meera Iyer',email:'meera.iyer@msde.gov.in',role:'State Monitoring Officer',scope:'Maharashtra'},{name:'Ravi Kumar',email:'ravi.kumar@msde.gov.in',role:'District Inspector',scope:'Pune, Maharashtra'}]);const [form,setForm]=useState({name:'',email:'',role:'District Inspector',scope:''});const add=()=>{if(!form.name||!form.email||!form.scope)return;setUsers([...users,form]);setForm({name:'',email:'',role:'District Inspector',scope:''})};return <Shell title="Workspace settings" crumb="Settings"><div className="settings-hero"><div><div className="eyebrow">MSDE MONITORING OPERATIONS</div><h2>People, permissions & governance</h2><p className="muted">Configured for the Ministry of Skill Development and Entrepreneurship and its monitoring partners.</p></div><div className="org-chip"><Building2 size={16}/><span><b>MSDE</b><small>Government of India</small></span></div></div><div className="settings-grid"><section className="panel"><div className="panel-head"><div><h2>Invite a workspace member</h2><p>Assign access by real operational position and geographic scope.</p></div><UserPlus size={19}/></div><div className="form-grid"><label>Full name<input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="e.g. Anita Verma"/></label><label>Official email<input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="name@msde.gov.in"/></label><label>Position<select value={form.role} onChange={e=>setForm({...form,role:e.target.value})}><option>National Admin</option><option>Secretary / Mission Director</option><option>Additional Secretary</option><option>State Monitoring Officer</option><option>District Inspector</option><option>Centre Operator</option><option>Auditor</option></select></label><label>Jurisdiction<input value={form.scope} onChange={e=>setForm({...form,scope:e.target.value})} placeholder="All India, state or district"/></label></div><Button onClick={add}><UserPlus data-icon="inline-start"/> Add user</Button></section><section className="panel"><div className="panel-head"><div><h2>Ministry operating model</h2><p>Role alignment based on official MSDE governance.</p></div></div><div className="org-list"><div><b>Secretary / Mission Director</b><span>National Skill Development Mission oversight</span></div><div><b>Additional / Joint Secretary</b><span>Scheme governance and executive coordination</span></div><div><b>DGT & NCVET partners</b><span>Training standards, accreditation and delivery assurance</span></div></div></section></div><section className="panel"><div className="panel-head"><div><h2>Workspace members <span className="count-pill">{users.length}</span></h2><p>Every action is scoped and recorded for audit.</p></div></div><div className="member-list">{users.map((u,i)=><div className="member-row" key={u.email}><div className="avatar">{u.name.split(' ').map(x=>x[0]).join('').slice(0,2)}</div><div className="member-main"><b>{u.name}</b><span>{u.email}</span></div><span className="role-pill">{u.role}</span><span className="scope-pill"><MapPin size={13}/>{u.scope}</span>{i>0&&<button className="icon-btn" aria-label={`Remove ${u.name}`} onClick={()=>setUsers(users.filter((_,n)=>n!==i))}><Trash2 size={16}/></button>}</div>)}</div></section></Shell>}
 function SystemHealthCard({ lastResult }: { lastResult?: string }) {
   const [health, setHealth] = useState<{ status: string; device?: string; service?: string; baseUrl?: string; enabled?: boolean; error?: string } | null>(null);
@@ -1135,4 +1575,23 @@ function ReconciliationList() {
 function ReconciliationDetail({id}:{id:string}){const [r,setR]=useState<AttendanceReconciliation|null>(null);const [note,setNote]=useState('');const [submitting,setSubmitting]=useState(false);const [submitted,setSubmitted]=useState(false);useEffect(()=>{endpoints.reconciliation(id).then(setR as any)},[id]);if(!r)return <Shell title="Reconciliation review"><div className="loading">Loading reconciliation record...</div></Shell>;const diff=r.expectedPresent-r.observedMedian;const submit=async(decision:'CONFIRMED'|'DISMISSED')=>{if(!note.trim())return;setSubmitting(true);await endpoints.reviewReconciliation(r.id,{decision,note,reviewer:'Arjun Sharma'});setR({...r,status:decision==='CONFIRMED'?'CONFIRMED_BY_REVIEWER':'DISMISSED_BY_REVIEWER',reviewer:{name:'Arjun Sharma',decision,note,decidedAt:new Date().toISOString()}});setSubmitting(false);setSubmitted(true)};return <Shell title="Reconciliation review" crumb={`Reconciliation / ${r.id}`}><div className="case-title"><div><div className="eyebrow">{r.id} · {r.observedAt.slice(0,10)}</div><h2>Biometric-to-video reconciliation</h2><p className="muted">{r.centreName} · {r.roomName} · {r.batchName}</p></div><ReconBadge status={r.status}/></div><div className="case-layout"><div className="case-main"><section className="panel"><div className="section-label">BIOMETRIC vs VIDEO COMPARISON</div><div className="recon-comparison"><div className="recon-side bio"><Fingerprint size={22}/><span>Biometric expected</span><strong>{r.expectedPresent}</strong><small>{r.biometricCheckIns} check-ins · {r.biometricCheckOuts} check-outs</small></div><div className="recon-arrow"><span className={diff>3?'diff-alert':'diff-ok'}>{diff>0?`−${diff}`:diff===0?'0':`+${Math.abs(diff)}`}</span></div><div className="recon-side vid"><Video size={22}/><span>Video median observed</span><strong>{r.observedMedian}</strong><small>Aggregate occupancy · not individual identity</small></div></div></section><section className="panel"><div className="section-label">WHY THIS WAS FLAGGED</div><div className="reason"><CircleAlert size={17}/><div><b>Trigger reason</b><p>{r.reason}</p></div></div></section><section className="panel"><div className="section-label">EVIDENCE TIMELINE</div>{r.evidence.map((ev,i)=><div key={i} className="evidence-row"><div className="evidence-thumb"><div className="evidence-placeholder">{ev.type==='snapshot'?<Eye size={16}/>:<Video size={16}/>}</div></div><div><b>{ev.type==='snapshot'?'Camera snapshot':'Video clip'}</b><span className="muted"> · {ev.capturedAt.slice(11,16)}</span><small className="muted"> · Simulated evidence placeholder</small></div></div>)}<div className="privacy-banner" style={{marginTop:12}}><ShieldCheck size={14}/><div><p>Evidence shows aggregate occupancy only. No individual is identified from video.</p></div></div></section><section className="panel"><div className="section-label">DETECTION METRICS</div><div className="metrics-grid"><div className="metric"><span>Camera quality</span><strong>{Math.round(r.cameraQualityScore*100)}%</strong><div className="progress"><i style={{width:`${r.cameraQualityScore*100}%`,background:r.cameraQualityScore>0.7?'var(--teal)':'var(--amber)'}}/></div></div><div className="metric"><span>Detection confidence</span><strong>{Math.round(r.detectionConfidence*100)}%</strong><div className="progress"><i style={{width:`${r.detectionConfidence*100}%`,background:r.detectionConfidence>0.7?'var(--teal)':'var(--amber)'}}/></div></div><div className="metric"><span>Count stability</span><strong>{Math.round(r.countStability*100)}%</strong><div className="progress"><i style={{width:`${r.countStability*100}%`,background:r.countStability>0.7?'var(--teal)':'var(--amber)'}}/></div></div><div className="metric"><span>Occlusion risk</span><strong className={r.occlusionRisk==='high'?'score-low':''}>{r.occlusionRisk}</strong></div></div></section>{!r.reviewer&&!submitted&&<section className="panel"><div className="section-label">REVIEWER DECISION</div><p className="muted" style={{fontSize:11,marginBottom:12}}>A note is required for both actions. Confirmation flags for inspection — it does not issue a penalty.</p><textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Required: explain your reasoning for the audit trail..." aria-label="Review note"/><div className="panel-actions" style={{marginTop:10}}><Button variant="outline" size="sm" onClick={()=>submit('DISMISSED')} disabled={submitting||!note.trim()}><CheckCircle2 data-icon="inline-start"/> Dismiss / explain</Button><Button size="sm" onClick={()=>submit('CONFIRMED')} disabled={submitting||!note.trim()}><Send data-icon="inline-start"/> Confirm for inspection</Button></div></section>}{(r.reviewer||submitted)&&<section className="panel"><div className="section-label">REVIEWER DECISION RECORDED</div><div className="review-result"><div className={`signal ${r.reviewer?.decision==='CONFIRMED'?'red':'teal'}`}>{r.reviewer?.decision==='CONFIRMED'?<AlertTriangle size={15}/>:<CheckCircle2 size={15}/>}</div><div><b>{r.reviewer?.decision==='CONFIRMED'?'Confirmed for inspection':'Dismissed — no action required'}</b><p className="muted">{r.reviewer?.note}</p><small className="muted">By {r.reviewer?.name} · {r.reviewer?.decidedAt?.slice(0,16).replace('T',' ')}</small></div></div></section>}</div><aside className="case-aside"><section className="panel"><div className="section-label">RECORD DETAILS</div><dl><dt>Status</dt><dd><ReconBadge status={r.status}/></dd><dt>Centre</dt><dd>{r.centreName}</dd><dt>Batch</dt><dd>{r.batchName}</dd><dt>Room</dt><dd>{r.roomName}</dd><dt>State</dt><dd>{r.state}</dd><dt>District</dt><dd>{r.district}</dd><dt>Observed at</dt><dd>{r.observedAt.slice(0,16).replace('T',' ')}</dd></dl></section><section className="panel"><div className="section-label">AUDIT TRAIL</div><div className="timeline"><div><i className="timeline-dot teal"/><div><b>Record created</b><span>{r.observedAt.slice(0,16).replace('T',' ')}</span></div></div><div><i className="timeline-dot blue"/><div><b>Video analysis completed</b><span>Confidence {Math.round(r.detectionConfidence*100)}%</span></div></div>{r.reviewer&&<div><i className={`timeline-dot ${r.reviewer.decision==='CONFIRMED'?'amber':'teal'}`}/><div><b>{r.reviewer.decision==='CONFIRMED'?'Confirmed by reviewer':'Dismissed by reviewer'}</b><span>{r.reviewer.name} · {r.reviewer.decidedAt?.slice(0,16).replace('T',' ')}</span></div></div>}</div></section><section className="panel"><div className="privacy-banner" style={{border:0,padding:0,margin:0,background:'transparent'}}><ShieldCheck size={16}/><div><b>Privacy notice</b><p>This record contains no personally identifiable information. Video data shows aggregate occupancy only.</p></div></div></section></aside></div></Shell>}
 function BiometricDevicesPage(){const [devices,setDevices]=useState<BiometricDevice[]>([]);const [q,setQ]=useState('');useEffect(()=>{endpoints.biometricDevices().then(setDevices as any)},[]);const filtered=devices.filter(d=>(d.id+d.centreName+d.state+d.source).toLowerCase().includes(q.toLowerCase()));return <Shell title="Biometric device health" crumb="Biometric devices"><div className="privacy-banner"><ShieldCheck size={19}/><div><b>Privacy boundary</b><p>This page shows device metadata and sync status only. No biometric samples, Aadhaar data, fingerprint templates, or PID data is stored or displayed.</p></div></div><div className="toolbar"><div className="search wide"><Search size={16}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search device ID, centre or source"/></div></div><section className="panel"><div className="table-meta"><span><b>{filtered.length}</b> biometric devices in monitoring scope</span><span className="muted">Last sync check 3 minutes ago</span></div><table><thead><tr><th>Device ID</th><th>Centre</th><th>Source</th><th>Last sync</th><th>Delayed events</th><th>Offline events</th><th>Health</th></tr></thead><tbody>{filtered.map(d=><tr key={d.id}><td><b>{d.id}</b></td><td>{d.centreName}<small>{d.district}, {d.state}</small></td><td><span className="role-pill">{d.source}</span></td><td>{d.lastSuccessfulSync.slice(0,16).replace('T',' ')}</td><td>{d.delayedEvents||'—'}</td><td>{d.offlineEvents||'—'}</td><td><span className={`badge ${d.health==='healthy'?'teal':d.health==='delayed'?'amber':'red'}`}>{d.health==='healthy'?<Wifi size={11}/>:d.health==='delayed'?<Clock size={11}/>:<WifiOff size={11}/>} {d.health}</span></td></tr>)}</tbody></table></section></Shell>}
 function Login(){const [role,setRole]=useState('National Admin'); const positions=['National Admin','Secretary / Mission Director','Additional Secretary','State Monitoring Officer','District Inspector','Centre Operator','Auditor']; return <div className="login"><div className="login-card"><div className="brand centered"><div className="brand-mark"><ShieldCheck size={24}/></div><div><b>Kaushal Lens</b><span>AI-Powered Skill Centre Monitoring</span></div></div><div className="eyebrow">MINISTRY WORKSPACE</div><h1>Evidence-led oversight for every training centre.</h1><p className="muted">Sign in to a role-scoped workspace for attendance, infrastructure and camera compliance.</p><label>Operational position<select value={role} onChange={e=>setRole(e.target.value)}>{positions.map(x=><option key={x}>{x}</option>)}</select></label><Button className="login-btn" onClick={()=>location.href=`/dashboard?role=${encodeURIComponent(role)}`}>Enter workspace <ChevronRight data-icon="inline-end"/></Button><div className="login-note"><ShieldCheck size={14}/> Privacy boundary: aggregate presence only · No facial recognition</div></div></div>}
-export default function RoutePage(){const pathname=usePathname(); const path=pathname.split('/').filter(Boolean); if(path[0]==='login')return <Login/>; if(path[0]==='demo'||(path[0]==='operations'&&path[1]==='live'))return <Shell title="Live Monitoring" crumb="Live Monitoring" hideHeading><DemoPage/></Shell>; if(path[0]==='attendance-reconciliation'&&path[1])return <ReconciliationDetail id={path[1]}/>;if(path[0]==='attendance-reconciliation')return <ReconciliationList/>;if(path[0]==='biometric-devices')return <BiometricDevicesPage/>;if(path[0]==='centres'&&path[1])return <CentrePage id={path[1]}/>;if(path[0]==='centres')return <Centres/>;if(path[0]==='cases'&&path[1])return <CasePage id={path[1]}/>;if(path[0]==='cases')return <Cases/>;if(path[0]==='settings')return <SettingsPage/>;if(['attendance','infrastructure','camera-health','reports','operations'].includes(path[0]))return <AnalyticsPage kind={path[0]}/>;return <Dashboard/>}
+export default function RoutePage(){
+  const pathname=usePathname();
+  const path=pathname.split('/').filter(Boolean);
+  if(path[0]==='login')return <Login/>;
+  if(path[0]==='demo'||(path[0]==='operations'&&path[1]==='live'))return <Shell title="Live Monitoring" crumb="Live Monitoring" hideHeading><DemoPage/></Shell>;
+  if(path[0]==='attendance-reconciliation'&&path[1])return <ReconciliationDetail id={path[1]}/>;
+  if(path[0]==='attendance-reconciliation')return <ReconciliationList/>;
+  if(path[0]==='biometric-devices')return <BiometricDevicesPage/>;
+  if(path[0]==='centres'&&path[1])return <CentrePage id={path[1]}/>;
+  if(path[0]==='centres')return <Centres/>;
+  if(path[0]==='cases'&&path[1])return <CasePage id={path[1]}/>;
+  if(path[0]==='cases')return <Cases/>;
+  if(path[0]==='settings')return <SettingsPage/>;
+  if(path[0]==='infrastructure')return <InfrastructureCompliancePage/>;
+  if(path[0]==='reports'||path[0]==='operations')return <ModelAccuracyAndReportsPage/>;
+  if(path[0]==='camera-health')return <CameraHealthAndEdgeBandwidthPage/>;
+  if(path[0]==='attendance')return <AttendanceIntelligencePage/>;
+  return <Dashboard/>;
+}
+

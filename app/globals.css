@@ -1351,4 +1351,106 @@ main {
   gap: 10px;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   CONFUSION MATRIX & ACCURACY ASSESSMENT STYLES
+   ═══════════════════════════════════════════════════════════════ */
+.confusion-matrix-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.matrix-card {
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.matrix-card.tp {
+  border-left: 4px solid #10b981;
+  background: #f0fdf4;
+}
+
+.matrix-card.tn {
+  border-left: 4px solid #3b82f6;
+  background: #eff6ff;
+}
+
+.matrix-card.fp {
+  border-left: 4px solid #f59e0b;
+  background: #fffbeb;
+}
+
+.matrix-card.fn {
+  border-left: 4px solid #ef4444;
+  background: #fef2f2;
+}
+
+.matrix-card span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+.matrix-card strong {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.matrix-card small {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* Low-Bandwidth Mode Selector */
+.bandwidth-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.bandwidth-card {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 10px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.bandwidth-card:hover {
+  border-color: #0b8f87;
+  transform: translateY(-1px);
+}
+
+.bandwidth-card.active {
+  border-color: #0b8f87;
+  background: #f0fdfa;
+  box-shadow: 0 0 0 2px rgba(11, 143, 135, 0.2);
+}
+
+.bandwidth-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e6f4f1;
+  color: #0b8f87;
+  margin-bottom: 8px;
+}
+
 
