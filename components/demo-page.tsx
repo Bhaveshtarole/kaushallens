@@ -53,6 +53,19 @@ interface SampleVideoPreset {
 
 const SAMPLE_PRESETS: SampleVideoPreset[] = [
   {
+    id: 'exam-malpractice-480p',
+    title: 'Exam Hall Audit (480P)',
+    sub: 'TC-UP-0056 · Postal Dept Exam (CCTV)',
+    durationText: '01:53',
+    videoUrl: '/demo/exam_malpractice_cctv_480p.mp4',
+    analysisUrl: '/demo/exam_malpractice_cctv_480p_analysis.json',
+    centreId: 'TC-UP-0056',
+    batchId: 'BATCH-POSTAL-EXAM',
+    expectedPresent: 18,
+    observedOccupancy: 17,
+    discrepancy: 1,
+  },
+  {
     id: 'class-one-720p',
     title: 'Class One 720P',
     sub: 'TC-DL-0018 · 22s 720P HD',
@@ -138,9 +151,35 @@ export function DemoPage() {
   const [selectedPreset, setSelectedPreset] = useState<SampleVideoPreset>(SAMPLE_PRESETS[0])
   const [customFile, setCustomFile] = useState<File | null>(null)
   const [customVideoUrl, setCustomVideoUrl] = useState<string | null>(null)
-  const [centreId, setCentreId] = useState('TC-DL-0018')
-  const [batchId, setBatchId] = useState('BATCH-CLASS-ONE')
-  const [expectedPresent, setExpectedPresent] = useState(15)
+  const [centreId, setCentreId] = useState(SAMPLE_PRESETS[0].centreId)
+  const [batchId, setBatchId] = useState(SAMPLE_PRESETS[0].batchId)
+  const [expectedPresent, setExpectedPresent] = useState(SAMPLE_PRESETS[0].expectedPresent)
+
+  // Dynamic aspect ratio & resolution state for responsive full-frame video playback
+  const [videoAspectRatio, setVideoAspectRatio] = useState<string>('480 / 548')
+  const [videoResolution, setVideoResolution] = useState<{ width: number; height: number }>({ width: 480, height: 548 })
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const playerCardRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement))
+    }
+    document.addEventListener('fullscreenchange', handleFsChange)
+    return () => document.removeEventListener('fullscreenchange', handleFsChange)
+  }, [])
+
+  const videoRatio = videoResolution.height > 0 ? videoResolution.width / videoResolution.height : 16 / 9
+
+  const toggleFullscreen = () => {
+    if (playerCardRef.current) {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {})
+      } else {
+        playerCardRef.current.requestFullscreen().catch(() => {})
+      }
+    }
+  }
 
   // Real-time synchronization state with Command Centre
   const [availableCentres, setAvailableCentres] = useState<Array<{ id: string; name: string; state: string }>>([])
@@ -158,7 +197,7 @@ export function DemoPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [isPlaying, setIsPlaying] = useState(true)
   const [currentTime, setCurrentTime] = useState(8)
-  const [duration, setDuration] = useState(20)
+  const [duration, setDuration] = useState(113)
   const [isMuted, setIsMuted] = useState(true)
 
   // View modes: 'ai' | 'raw' | 'split'
@@ -190,7 +229,21 @@ export function DemoPage() {
       .catch(() => {})
   }, [])
 
-  // Video time update
+  // Video metadata & time update
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      const vw = videoRef.current.videoWidth
+      const vh = videoRef.current.videoHeight
+      if (vw && vh) {
+        setVideoAspectRatio(`${vw} / ${vh}`)
+        setVideoResolution({ width: vw, height: vh })
+      }
+      if (videoRef.current.duration && !isNaN(videoRef.current.duration)) {
+        setDuration(videoRef.current.duration)
+      }
+    }
+  }
+
   const handleTimeUpdate = () => {
     if (!videoRef.current) return
     setCurrentTime(videoRef.current.currentTime)
@@ -292,12 +345,30 @@ export function DemoPage() {
     setExpectedPresent(preset.expectedPresent)
     setCurrentTime(0)
 
+    if (preset.id === 'exam-malpractice-480p') {
+      setVideoAspectRatio('480 / 548')
+      setVideoResolution({ width: 480, height: 548 })
+    } else if (preset.id === 'class-one-720p') {
+      setVideoAspectRatio('16 / 9')
+      setVideoResolution({ width: 1280, height: 720 })
+    } else {
+      setVideoAspectRatio('640 / 352')
+      setVideoResolution({ width: 640, height: 352 })
+    }
+
     if (preset.analysisUrl) {
       try {
         const res = await fetch(preset.analysisUrl)
         if (res.ok) {
           const data = await res.json()
           setAiResult(data)
+          if (data.video?.resolution) {
+            const parts = data.video.resolution.split('x').map(Number)
+            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[0] > 0 && parts[1] > 0) {
+              setVideoAspectRatio(`${parts[0]} / ${parts[1]}`)
+              setVideoResolution({ width: parts[0], height: parts[1] })
+            }
+          }
           return
         }
       } catch {}
@@ -316,11 +387,20 @@ export function DemoPage() {
 
   // Automatically load initial preset video analysis
   useEffect(() => {
-    const initUrl = selectedPreset.analysisUrl || '/demo/classroom_cctv_class_one_720p_analysis.json'
+    const initUrl = selectedPreset.analysisUrl || '/demo/exam_malpractice_cctv_480p_analysis.json'
     fetch(initUrl)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data) setAiResult(data)
+        if (data) {
+          setAiResult(data)
+          if (data.video?.resolution) {
+            const parts = data.video.resolution.split('x').map(Number)
+            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[0] > 0 && parts[1] > 0) {
+              setVideoAspectRatio(`${parts[0]} / ${parts[1]}`)
+              setVideoResolution({ width: parts[0], height: parts[1] })
+            }
+          }
+        }
       })
       .catch(() => {})
   }, [selectedPreset.analysisUrl])
@@ -784,108 +864,118 @@ export function DemoPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-5">
         {/* ── Left Column: Video Stage (approx 58%) ── */}
         <div className="lg:col-span-7 flex flex-col gap-3">
-          {/* Main Video Box */}
-          <div className="rounded-xl overflow-hidden bg-black border border-slate-900 relative shadow-md">
+          {/* Main Video Box with Dynamic Aspect-Ratio Player */}
+          <div
+            ref={playerCardRef}
+            className={`rounded-xl overflow-hidden bg-slate-950 border border-slate-900 relative shadow-md flex flex-col ${
+              isFullscreen ? 'fixed inset-0 z-50 rounded-none w-screen h-screen justify-between' : ''
+            }`}
+          >
             {/* Top Bar inside Video Player */}
-            <div className="absolute top-0 left-0 right-0 z-20 px-3.5 py-2.5 flex items-center justify-between bg-gradient-to-b from-black via-black/90 to-transparent text-white text-xs">
-              <div className="flex items-center gap-2 font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <div className="px-3.5 py-2.5 flex items-center justify-between bg-slate-950/95 border-b border-slate-900 text-white text-xs z-10">
+              <div className="flex items-center gap-2 font-medium flex-wrap">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span className="font-semibold text-white">Classroom CCTV Feed</span>
-                <span className="text-slate-500">|</span>
+                <span className="text-slate-600">|</span>
                 <span className="text-slate-300 font-mono text-[11px]">{centreId}</span>
-                <span className="text-slate-500">|</span>
+                <span className="text-slate-600">|</span>
                 <span className="text-slate-300 font-mono text-[11px]">{batchId}</span>
+                <span className="text-slate-600">|</span>
+                <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-cyan-400">
+                  {videoResolution.width}×{videoResolution.height} ({videoAspectRatio})
+                </span>
               </div>
 
               <div className="flex items-center gap-3 text-slate-300 text-[11px] font-mono">
                 <span>08 Oct 2026 10:42:17 AM</span>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (videoRef.current) {
-                      if (document.fullscreenElement) {
-                        document.exitFullscreen().catch(() => {})
-                      } else {
-                        videoRef.current.requestFullscreen().catch(() => {})
-                      }
-                    }
-                  }}
-                  className="text-slate-400 hover:text-white transition-colors cursor-pointer"
-                  title="Fullscreen"
+                  onClick={toggleFullscreen}
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer p-0.5"
+                  title="Toggle Fullscreen"
                 >
                   <Maximize2 size={13} />
                 </button>
               </div>
             </div>
 
-            {/* In-Video Tracked Counter Pill (Top-Left) */}
-            <div className="absolute top-10 left-3 z-20 flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-950/85 backdrop-blur-md border border-white/10 text-white text-xs font-semibold shadow-lg">
-              <div className="flex items-center gap-1.5">
-                <Users size={13} className="text-cyan-400" />
-                <span className="font-mono">{activeTrackedCount} {activeTrackedCount === 1 ? 'person' : 'people'}</span>
-              </div>
-              <span className="text-white/20">|</span>
-              <div className="flex items-center gap-1.5 text-slate-300">
-                <LayoutGrid size={12} className="text-violet-400" />
-                <span className="font-mono">{activeObjectCount} objects</span>
-              </div>
-            </div>
-
-            {/* Video & Canvas Frame */}
-            <div
-              className="relative aspect-[20/11] w-full bg-black cursor-pointer group select-none"
-              onClick={handleVideoClick}
-              title="Click video to re-analyse footage in real time"
-            >
-              <video
-                ref={videoRef}
-                src={activeVideoSrc}
-                className="w-full h-full object-cover"
-                onTimeUpdate={handleTimeUpdate}
-                playsInline
-                autoPlay
-                muted={isMuted}
-                loop
-              />
-              <canvas
-                ref={canvasRef}
-                className="absolute inset-0 w-full h-full pointer-events-none"
-              />
-
-              {/* Click-to-analyze floating prompt on hover */}
-              <div className="absolute top-3 left-3 z-20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity bg-slate-950/85 backdrop-blur text-cyan-300 text-[11px] px-2.5 py-1 rounded-md border border-cyan-500/40 flex items-center gap-1.5 shadow-lg">
-                <Sparkles size={12} className="text-cyan-400 animate-pulse" />
-                <span>Click video to re-analyse footage in real time</span>
-              </div>
-
-              {/* In-Flight Scanning Animation during analysis */}
-              {isAnalyzing && (
-                <div className="absolute inset-0 z-30 bg-slate-950/70 backdrop-blur-[2px] flex flex-col items-center justify-center p-6 text-center">
-                  <div className="scanline-beam" />
-                  <div className="w-14 h-14 rounded-full border-2 border-cyan-400/40 border-t-cyan-400 animate-spin mb-3 flex items-center justify-center">
-                    <Sparkles size={20} className="text-cyan-400" />
+            {/* Dynamic Aspect Ratio Video Stage */}
+            <div className="w-full bg-black flex items-center justify-center p-0 relative overflow-hidden flex-1 min-h-[300px]">
+              <div
+                className="relative max-w-full cursor-pointer group select-none transition-all duration-300 flex items-center justify-center"
+                style={{
+                  aspectRatio: videoAspectRatio,
+                  maxHeight: isFullscreen ? 'calc(100vh - 90px)' : 'min(72vh, 620px)',
+                  width: `min(100%, calc(${isFullscreen ? '(100vh - 90px)' : 'min(72vh, 620px)'} * ${videoRatio}))`,
+                  margin: '0 auto',
+                }}
+                onClick={handleVideoClick}
+                title="Click video to re-analyse footage in real time"
+              >
+                {/* In-Video Tracked Counter Pill (Top-Left of the actual active video frame) */}
+                <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-slate-950/85 backdrop-blur-md border border-white/10 text-white text-xs font-semibold shadow-lg">
+                  <div className="flex items-center gap-1.5">
+                    <Users size={13} className="text-cyan-400" />
+                    <span className="font-mono">{activeTrackedCount} {activeTrackedCount === 1 ? 'person' : 'people'}</span>
                   </div>
-                  <h3 className="text-sm font-bold text-white tracking-wide mb-1">
-                    ANALYSING SURVEILLANCE FOOTAGE
-                  </h3>
-                  <p className="text-xs text-cyan-300/80 mb-3 font-mono">
-                    Roboflow RF-DETR Transformer + Seated Persistent Lock
-                  </p>
-                  <div className="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all duration-300"
-                      style={{ width: `${analysisProgress}%` }}
-                    />
+                  <span className="text-white/20">|</span>
+                  <div className="flex items-center gap-1.5 text-slate-300">
+                    <LayoutGrid size={12} className="text-violet-400" />
+                    <span className="font-mono">{activeObjectCount} objects</span>
                   </div>
-                  <span className="text-[11px] font-mono text-cyan-400 mt-1">
-                    {analysisProgress}% Complete
-                  </span>
                 </div>
-              )}
+
+                <video
+                  ref={videoRef}
+                  src={activeVideoSrc}
+                  className="w-full h-full object-fill block"
+                  onLoadedMetadata={handleLoadedMetadata}
+                  onTimeUpdate={handleTimeUpdate}
+                  playsInline
+                  autoPlay
+                  muted={isMuted}
+                  loop
+                />
+                <canvas
+                  ref={canvasRef}
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                />
+
+                {/* Click-to-analyze floating prompt on hover */}
+                <div className="absolute top-2.5 right-2.5 z-20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity bg-slate-950/85 backdrop-blur text-cyan-300 text-[11px] px-2.5 py-1 rounded-md border border-cyan-500/40 flex items-center gap-1.5 shadow-lg">
+                  <Sparkles size={12} className="text-cyan-400 animate-pulse" />
+                  <span>Click video to re-analyse footage in real time</span>
+                </div>
+
+                {/* In-Flight Scanning Animation during analysis */}
+                {isAnalyzing && (
+                  <div className="absolute inset-0 z-30 bg-slate-950/75 backdrop-blur-[2px] flex flex-col items-center justify-center p-6 text-center">
+                    <div className="scanline-beam" />
+                    <div className="w-14 h-14 rounded-full border-2 border-cyan-400/40 border-t-cyan-400 animate-spin mb-3 flex items-center justify-center">
+                      <Sparkles size={20} className="text-cyan-400" />
+                    </div>
+                    <h3 className="text-sm font-bold text-white tracking-wide mb-1">
+                      ANALYSING SURVEILLANCE FOOTAGE
+                    </h3>
+                    <p className="text-xs text-cyan-300/80 mb-3 font-mono">
+                      Roboflow RF-DETR Transformer + Seated Persistent Lock
+                    </p>
+                    <div className="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all duration-300"
+                        style={{ width: `${analysisProgress}%` }}
+                      />
+                    </div>
+                    <span className="text-[11px] font-mono text-cyan-400 mt-1">
+                      {analysisProgress}% Complete
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Bottom Video Controls Bar inside Player */}
-            <div className="px-3.5 py-2 bg-slate-950/90 border-t border-slate-900 flex items-center gap-3 text-white">
+            <div className="px-3.5 py-2 bg-slate-950/95 border-t border-slate-900 flex items-center gap-3 text-white z-10">
               <button
                 type="button"
                 onClick={togglePlay}
@@ -931,15 +1021,7 @@ export function DemoPage() {
 
                 <button
                   type="button"
-                  onClick={() => {
-                    if (videoRef.current) {
-                      if (document.fullscreenElement) {
-                        document.exitFullscreen().catch(() => {})
-                      } else {
-                        videoRef.current.requestFullscreen().catch(() => {})
-                      }
-                    }
-                  }}
+                  onClick={toggleFullscreen}
                   className="hover:text-white transition-colors cursor-pointer p-1"
                   title="Fullscreen"
                 >
