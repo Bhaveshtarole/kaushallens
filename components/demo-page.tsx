@@ -1251,53 +1251,41 @@ export function DemoPage() {
 
             {/* Form Fields: 2 Rows to prevent any cramping or overlapping */}
             <div className="flex flex-col gap-2.5 mb-3.5">
-              {/* Row 1: Training Centre Selection */}
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                  Empaneled Training Centre
-                </label>
-                <div className="flex gap-2">
-                  {availableCentres.length > 0 && (
-                    <select
-                      className="flex-1 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-slate-800 cursor-pointer focus:outline-none focus:ring-1 focus:ring-sky-500 font-medium"
-                      onChange={(e) => {
-                        if (e.target.value) setCentreId(e.target.value)
-                      }}
-                      value={availableCentres.some(c => c.id === centreId) ? centreId : ''}
-                      aria-label="Select registered training centre"
-                    >
-                      <option value="" disabled>Select registered centre...</option>
-                      {availableCentres.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} ({c.id})
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <div className="relative w-32 flex-shrink-0">
-                    <input
-                      type="text"
-                      list="centre-list-options"
-                      value={centreId}
-                      onChange={(e) => setCentreId(e.target.value)}
-                      className="w-full text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg bg-slate-50 font-mono text-slate-800 font-bold text-center focus:outline-none focus:ring-1 focus:ring-sky-500"
-                      placeholder="TC-DL-0018"
-                      title="Centre ID Code"
-                    />
-                    <datalist id="centre-list-options">
-                      {availableCentres.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} ({c.state})
-                        </option>
-                      ))}
-                    </datalist>
-                  </div>
+              {/* Row 1: Training Centre Selection (100% inside container, clean pill badge) */}
+              <div className="w-full">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-700">
+                    Empaneled Training Centre
+                  </label>
+                  <span className="text-[10px] font-mono text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200 font-bold">
+                    {centreId}
+                  </span>
+                </div>
+                <div className="w-full relative">
+                  <select
+                    className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-lg bg-white text-slate-800 cursor-pointer focus:outline-none focus:ring-1 focus:ring-sky-500 font-medium truncate"
+                    onChange={(e) => {
+                      if (e.target.value) setCentreId(e.target.value)
+                    }}
+                    value={availableCentres.some(c => c.id === centreId) ? centreId : ''}
+                    aria-label="Select registered training centre"
+                  >
+                    <option value="" disabled>Select registered centre...</option>
+                    {availableCentres.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.id})
+                      </option>
+                    ))}
+                    {!availableCentres.some(c => c.id === centreId) && centreId && (
+                      <option value={centreId}>{centreId} (Active Centre)</option>
+                    )}
+                  </select>
                 </div>
               </div>
 
-              {/* Row 2: Batch ID & Reported Attendance (Clean 2-Column Grid) */}
+              {/* Row 2: Batch ID & Reported Attendance (Clean 2-Column Grid with min-w-0 to prevent overflow) */}
               <div className="grid grid-cols-2 gap-2.5">
-                <div>
+                <div className="min-w-0">
                   <label className="text-[11px] font-bold text-slate-700 block mb-1">
                     Batch / Session ID
                   </label>
@@ -1310,7 +1298,7 @@ export function DemoPage() {
                   />
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <label className="text-[11px] font-bold text-slate-700 block mb-1">
                     Reported Attendance
                   </label>
