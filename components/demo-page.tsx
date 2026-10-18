@@ -91,45 +91,6 @@ const SAMPLE_PRESETS: SampleVideoPreset[] = [
     observedOccupancy: 17,
     discrepancy: 0,
   },
-  {
-    id: 'full-stream',
-    title: 'Full stream',
-    sub: 'TC-MH-0042 · 2.5 min',
-    durationText: '02:30',
-    videoUrl: '/demo/classroom_real_cctv.mp4',
-    analysisUrl: '/demo/real_cctv_analysis.json',
-    centreId: 'TC-MH-0042',
-    batchId: 'BATCH-DEMO-101',
-    expectedPresent: 13,
-    observedOccupancy: 17,
-    discrepancy: 0,
-  },
-  {
-    id: 'rapid-check',
-    title: 'Rapid check',
-    sub: 'TC-MH-0042 · 30s',
-    durationText: '00:30',
-    videoUrl: '/demo/classroom_real_cctv_30s.mp4',
-    analysisUrl: '/demo/real_cctv_analysis.json',
-    centreId: 'TC-MH-0042',
-    batchId: 'BATCH-DEMO-101',
-    expectedPresent: 13,
-    observedOccupancy: 17,
-    discrepancy: 0,
-  },
-  {
-    id: 'alternate-angle',
-    title: 'Alternate angle',
-    sub: 'TC-MH-0042 · 20s',
-    durationText: '00:20',
-    videoUrl: '/demo/classroom_real_cctv_alt20s.mp4',
-    analysisUrl: '/demo/real_cctv_analysis.json',
-    centreId: 'TC-MH-0042',
-    batchId: 'BATCH-DEMO-101',
-    expectedPresent: 13,
-    observedOccupancy: 17,
-    discrepancy: 0,
-  },
 ]
 
 // Trend curve matching the exact data points from the user screenshot
@@ -1251,15 +1212,18 @@ export function DemoPage() {
               </p>
             </div>
 
-            {/* 2x2 Grid */}
-            <div className="grid grid-cols-2 gap-3">
-              {SAMPLE_PRESETS.map((preset) => {
+            {/* Presets Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {SAMPLE_PRESETS.map((preset, idx) => {
                 const isSelected = selectedPreset.id === preset.id && !customFile
+                const isFeatured = idx === 0
                 return (
                   <div
                     key={preset.id}
                     onClick={() => handleSelectPreset(preset)}
                     className={`group cursor-pointer rounded-lg border overflow-hidden transition-all bg-white hover:border-slate-400 ${
+                      isFeatured ? 'sm:col-span-2' : 'sm:col-span-1'
+                    } ${
                       isSelected
                         ? 'border-sky-600 ring-2 ring-sky-600/20 shadow-sm'
                         : 'border-slate-200'
