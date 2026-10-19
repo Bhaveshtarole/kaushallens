@@ -164,6 +164,7 @@ export function DemoPage() {
   // View modes: 'ai' | 'raw' | 'split'
   const [viewMode, setViewMode] = useState<'ai' | 'raw' | 'split'>('ai')
   const [detectionFilter, setDetectionFilter] = useState<'all' | 'person' | 'object'>('all')
+  const [privacyBlur, setPrivacyBlur] = useState<boolean>(true)
 
   // Analysis state
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -507,7 +508,7 @@ export function DemoPage() {
 
       ctx.clearRect(0, 0, width, height)
 
-      if (viewMode === 'ai' || viewMode === 'split') {
+      if (viewMode === 'ai' || viewMode === 'split' || privacyBlur) {
         const timeSec = video.currentTime
 
         // Parse resolution from video metadata if available (e.g. 1280x720 or 640x352)
@@ -532,6 +533,7 @@ export function DemoPage() {
           label: string
           category: 'person' | 'object'
           color: string
+          trackId: number
         }> = []
 
         // If aiResult has samples, interpolate between bounding boxes across playback time for smooth real-time tracking
@@ -671,7 +673,7 @@ export function DemoPage() {
               const y2 = b.y2 * scaleY
 
               const label = isPerson
-                ? `person #${b.track_id} ${b.conf.toFixed(2)}`
+                ? (privacyBlur ? `🛡️ Trainee #${b.track_id} (Masked)` : `person #${b.track_id} ${b.conf.toFixed(2)}`)
                 : `${cname} ${b.conf.toFixed(2)}`
 
               return {
@@ -683,6 +685,7 @@ export function DemoPage() {
                 label,
                 category: b.category,
                 color,
+                trackId: b.track_id,
               }
             })
         }
@@ -723,56 +726,125 @@ export function DemoPage() {
               const y1 = by1 * scaleY
               const w = (bx2 - bx1) * scaleX
               const h = (by2 - by1) * scaleY
+              const isPerson = cat === 'person'
+              const label = isPerson
+                ? (privacyBlur ? `🛡️ Trainee #${idx + 1} (Masked)` : `${name} ${conf.toFixed(2)}`)
+                : `${name} ${conf.toFixed(2)}`
               return {
                 x1,
                 y1,
                 w,
                 h,
                 conf,
-                label: `${name} ${conf.toFixed(2)}`,
+                label,
                 category: cat,
                 color,
+                trackId: idx + 1,
               }
             })
         }
 
-        ctx.save()
-        if (viewMode === 'split') {
-          // Clip drawing to right half
-          ctx.beginPath()
-          ctx.rect(width / 2, 0, width / 2, height)
-          ctx.clip()
+        // 1. DPDP Privacy Shield: Apply real-time Gaussian face blur and privacy shroud over every person
+        if (privacyBlur) {
+          boxesToDraw.forEach(({ x1, y1, w, h, category }) => {
+            if (category === 'person') {
+              // The anatomical head/face is located in the upper ~32% of the human bounding box
+              const faceW = Math.max(16, w * 0.65)
+              const faceH = Math.max(16, h * 0.32)
+              const faceX = Math.max(0, x1 + (w - faceW) / 2)
+              const faceY = Math.max(0, y1 + h * 0.02)
+
+              ctx.save()
+              ctx.beginPath()
+              if (typeof ctx.roundRect === 'function') {
+                ctx.roundRect(faceX, faceY, faceW, faceH, Math.min(faceW, faceH) * 0.45)
+              } else {
+                ctx.rect(faceX, faceY, faceW, faceH)
+              }
+              ctx.clip()
+
+              try {
+                // Live Gaussian blur on the underlying video frame
+                ctx.filter = 'blur(16px)'
+                ctx.drawImage(video, faceX, faceY, faceW, faceH, faceX, faceY, faceW, faceH)
+              } catch {}
+
+              // Frosted glass privacy gradient overlay
+              ctx.filter = 'none'
+              const grad = ctx.createLinearGradient(faceX, faceY, faceX, faceY + faceH)
+              grad.addColorStop(0, 'rgba(15, 23, 42, 0.65)')
+              grad.addColorStop(1, 'rgba(30, 41, 59, 0.78)')
+              ctx.fillStyle = grad
+              ctx.fillRect(faceX, faceY, faceW, faceH)
+
+              // Subtle emerald privacy ring
+              ctx.strokeStyle = 'rgba(52, 211, 153, 0.85)'
+              ctx.lineWidth = 1.5
+              ctx.stroke()
+              ctx.restore()
+
+              // Floating privacy badge above the blurred face
+              ctx.save()
+              ctx.font = 'bold 9px system-ui, -apple-system, sans-serif'
+              const tagText = `🛡️ MASKED`
+              const tagMetrics = ctx.measureText(tagText)
+              const tw = tagMetrics.width + 6
+              const th = 13
+              const tx = faceX + (faceW - tw) / 2
+              const ty = Math.max(0, faceY - th - 2)
+
+              ctx.fillStyle = 'rgba(15, 23, 42, 0.90)'
+              ctx.fillRect(tx, ty, tw, th)
+              ctx.strokeStyle = 'rgba(52, 211, 153, 0.7)'
+              ctx.lineWidth = 1
+              ctx.strokeRect(tx, ty, tw, th)
+
+              ctx.fillStyle = '#34d399'
+              ctx.fillText(tagText, tx + 3, ty + 9.5)
+              ctx.restore()
+            }
+          })
         }
 
-        // Draw color-coded bounding boxes and tags
-        boxesToDraw.forEach(({ x1, y1, w, h, label, color }) => {
-          ctx.strokeStyle = color
-          ctx.lineWidth = 2
-          ctx.strokeRect(x1, y1, w, h)
+        // 2. Draw standard detection bounding boxes and color tags (if in AI or Split view mode)
+        if (viewMode === 'ai' || viewMode === 'split') {
+          ctx.save()
+          if (viewMode === 'split') {
+            // Clip drawing to right half
+            ctx.beginPath()
+            ctx.rect(width / 2, 0, width / 2, height)
+            ctx.clip()
+          }
 
-          // Color tag label
-          ctx.font = 'bold 11px system-ui, -apple-system, sans-serif'
-          const metrics = ctx.measureText(label)
-          const tagW = metrics.width + 10
-          const tagH = 17
+          boxesToDraw.forEach(({ x1, y1, w, h, label, color }) => {
+            ctx.strokeStyle = color
+            ctx.lineWidth = 2
+            ctx.strokeRect(x1, y1, w, h)
 
-          ctx.fillStyle = color
-          ctx.fillRect(x1, Math.max(0, y1 - tagH), tagW, tagH)
+            // Color tag label
+            ctx.font = 'bold 11px system-ui, -apple-system, sans-serif'
+            const metrics = ctx.measureText(label)
+            const tagW = metrics.width + 10
+            const tagH = 17
 
-          ctx.fillStyle = '#ffffff'
-          ctx.fillText(label, x1 + 5, Math.max(12, y1 - 4))
-        })
+            ctx.fillStyle = color
+            ctx.fillRect(x1, Math.max(0, y1 - tagH), tagW, tagH)
 
-        ctx.restore()
+            ctx.fillStyle = '#ffffff'
+            ctx.fillText(label, x1 + 5, Math.max(12, y1 - 4))
+          })
 
-        if (viewMode === 'split') {
-          // Draw subtle split line
-          ctx.strokeStyle = '#ffffff'
-          ctx.lineWidth = 2
-          ctx.beginPath()
-          ctx.moveTo(width / 2, 0)
-          ctx.lineTo(width / 2, height)
-          ctx.stroke()
+          ctx.restore()
+
+          if (viewMode === 'split') {
+            // Draw subtle split line
+            ctx.strokeStyle = '#ffffff'
+            ctx.lineWidth = 2
+            ctx.beginPath()
+            ctx.moveTo(width / 2, 0)
+            ctx.lineTo(width / 2, height)
+            ctx.stroke()
+          }
         }
       }
 
@@ -781,7 +853,7 @@ export function DemoPage() {
 
     animId = requestAnimationFrame(renderOverlay)
     return () => cancelAnimationFrame(animId)
-  }, [viewMode, aiResult, detectionFilter])
+  }, [viewMode, aiResult, detectionFilter, privacyBlur])
 
   const formatTimecode = (sec: number) => {
     const m = Math.floor(sec / 60)
@@ -818,6 +890,11 @@ export function DemoPage() {
             <Cpu size={13} className="text-slate-500" />
             <span>RF-DETR + ByteTrack</span>
           </div>
+
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium">
+            <ShieldCheck size={13} className="text-emerald-600" />
+            <span>DPDP Zero-PII Face Masking</span>
+          </div>
         </div>
       </div>
 
@@ -845,6 +922,12 @@ export function DemoPage() {
                 <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-cyan-400">
                   {videoResolution.width}×{videoResolution.height} ({videoAspectRatio})
                 </span>
+                {privacyBlur && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/50 text-[10px] font-mono text-emerald-400">
+                    <ShieldCheck size={11} />
+                    <span>DPDP FACE BLUR ACTIVE</span>
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-3 text-slate-300 text-[11px] font-mono">
@@ -1032,6 +1115,27 @@ export function DemoPage() {
               >
                 <LayoutGrid size={13} />
                 <span>Split View</span>
+              </button>
+
+              <div className="h-5 w-px bg-slate-200 mx-0.5 hidden sm:block" />
+
+              {/* DPDP Face Anonymization Privacy Toggle */}
+              <button
+                type="button"
+                onClick={() => setPrivacyBlur(!privacyBlur)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all border ${
+                  privacyBlur
+                    ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm hover:bg-emerald-700'
+                    : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                }`}
+                title={
+                  privacyBlur
+                    ? 'DPDP Privacy Shield Active: Facial PII is dynamically blurred across all video frames'
+                    : 'Auditor Break-Glass Mode: Facial unmasking enabled for forensic investigation'
+                }
+              >
+                <ShieldCheck size={14} className={privacyBlur ? 'text-white' : 'text-amber-600'} />
+                <span>{privacyBlur ? 'Privacy Shield: ON' : 'Privacy Shield: OFF (Audit Mode)'}</span>
               </button>
             </div>
 
