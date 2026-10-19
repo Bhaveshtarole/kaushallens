@@ -17,6 +17,7 @@ import {
   forwardBiometricEvents,
   getAIAttendance,
   analyzeVideoWithAI,
+  analyzeLiveFrameWithAI,
   type VideoJobInput,
 } from '@/lib/ai-client'
 
@@ -257,6 +258,51 @@ export async function POST(req: Request, { params }: RouteParams) {
       })
     } catch (err: any) {
       return NextResponse.json({ ok: false, error: err.message }, { status: 400 })
+    }
+  }
+
+  // ── Route: POST /api/v1/analysis/live-frame ──
+  if (key === 'v1/analysis/live-frame') {
+    try {
+      const contentType = req.headers.get('content-type') || ''
+      let imageBuffer: Buffer | undefined
+      let centreId = 'TC-LIVE-001'
+      let batchId = 'BATCH-LIVE-001'
+      let expectedPresent = 1
+
+      if (contentType.includes('multipart/form-data')) {
+        const formData = await req.formData()
+        const frameFile = formData.get('frame') as File | null
+        centreId = (formData.get('centreId') || formData.get('centre_id') || 'TC-LIVE-001') as string
+        batchId = (formData.get('batchId') || formData.get('batch_id') || 'BATCH-LIVE-001') as string
+        expectedPresent = Number(formData.get('expectedPresent') || formData.get('expected_present') || 1)
+
+        if (frameFile) {
+          const ab = await frameFile.arrayBuffer()
+          imageBuffer = Buffer.from(ab)
+        }
+      } else {
+        const json = await req.json().catch(() => ({}))
+        centreId = json.centreId || 'TC-LIVE-001'
+        batchId = json.batchId || 'BATCH-LIVE-001'
+        expectedPresent = Number(json.expectedPresent || 1)
+        if (json.imageBase64) {
+          const base64Data = json.imageBase64.replace(/^data:image\/\w+;base64,/, '')
+          imageBuffer = Buffer.from(base64Data, 'base64')
+        }
+      }
+
+      const frameResult = await analyzeLiveFrameWithAI({
+        imageBuffer,
+        centreId,
+        batchId,
+        expectedPresent,
+      })
+
+      return NextResponse.json(frameResult)
+    } catch (err: any) {
+      console.error('[route] live-frame handler failed:', err)
+      return NextResponse.json({ status: 'error', error: err.message }, { status: 500 })
     }
   }
 

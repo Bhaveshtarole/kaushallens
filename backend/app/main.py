@@ -77,6 +77,58 @@ async def analyze_video(
         await video.close()
 
 
+@app.post("/v1/analysis/frame")
+async def analyze_frame(
+    frame: UploadFile = File(...),
+    centre_id: str = Form("TC-LIVE-001"),
+    batch_id: str = Form("BATCH-LIVE-001"),
+    expected_present: int = Form(1),
+):
+    try:
+        raw_bytes = await frame.read()
+        import cv2
+        import numpy as np
+        from datetime import timezone
+
+        nparr = np.frombuffer(raw_bytes, np.uint8)
+        frame_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if frame_bgr is None:
+            raise HTTPException(status_code=400, detail="Invalid image frame uploaded.")
+
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        all_boxes = analyzer._detect_objects_and_persons(frame_bgr, frame_rgb, time_sec=0.0)
+        q_score, q_status, flags, brightness, blur_var = analyzer.camera_quality(frame_bgr)
+
+        person_boxes = [b for b in all_boxes if b.get("category") == "person"]
+        object_boxes = [b for b in all_boxes if b.get("category") == "object"]
+
+        h, w = frame_bgr.shape[:2]
+
+        return {
+            "status": "success",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "centre_id": centre_id,
+            "batch_id": batch_id,
+            "people_count": len(person_boxes),
+            "object_count": len(object_boxes),
+            "expected_present": expected_present,
+            "boxes": all_boxes,
+            "camera_quality": {
+                "score": q_score,
+                "status": q_status,
+                "flags": flags,
+                "brightness": brightness,
+                "blur_variance": blur_var,
+            },
+            "frame_width": int(w),
+            "frame_height": int(h),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        await frame.close()
+
+
 @app.get("/v1/analysis/video/{observation_id}/annotated")
 def get_annotated_video(observation_id: str):
     video_path = settings.storage_dir / "annotated" / f"{observation_id}.mp4"

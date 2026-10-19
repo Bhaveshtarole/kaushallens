@@ -526,3 +526,144 @@ function createDemoFallbackReconciliation(
     message: fallbackReason,
   }
 }
+
+export type LiveFrameInput = {
+  imageBlob?: Blob
+  imageBuffer?: Buffer
+  centreId?: string
+  batchId?: string
+  expectedPresent?: number
+}
+
+export type LiveFrameResult = {
+  status: 'success' | 'fallback' | 'error'
+  timestamp: string
+  peopleCount: number
+  objectCount: number
+  boxes: Array<{
+    track_id: number
+    confidence: number
+    class_name: string
+    category: 'person' | 'object'
+    class_id?: number
+    box: [number, number, number, number]
+  }>
+  cameraQuality: {
+    score: number
+    status: 'healthy' | 'degraded' | 'unhealthy'
+    flags: string[]
+    brightness: number
+    blur_variance: number
+  }
+  frameWidth: number
+  frameHeight: number
+  isFallback: boolean
+  message?: string
+}
+
+export async function analyzeLiveFrameWithAI(input: LiveFrameInput): Promise<LiveFrameResult> {
+  const centreId = input.centreId || 'TC-LIVE-001'
+  const batchId = input.batchId || 'BATCH-LIVE-001'
+  const expectedPresent = input.expectedPresent ?? 1
+
+  if (!AI_ENABLED) {
+    return createFallbackLiveFrameResult(centreId, batchId, expectedPresent, 'AI disabled in .env')
+  }
+
+  try {
+    const formData = new FormData()
+    formData.append('centre_id', centreId)
+    formData.append('batch_id', batchId)
+    formData.append('expected_present', String(expectedPresent))
+
+    if (input.imageBlob) {
+      formData.append('frame', input.imageBlob, 'live_frame.jpg')
+    } else if (input.imageBuffer) {
+      const blob = new Blob([new Uint8Array(input.imageBuffer)], { type: 'image/jpeg' })
+      formData.append('frame', blob, 'live_frame.jpg')
+    } else {
+      throw new Error('No frame data provided')
+    }
+
+    const res = await fetchWithTimeout(
+      `${AI_BASE_URL}/v1/analysis/frame`,
+      {
+        method: 'POST',
+        body: formData,
+      },
+      4_000 // 4s timeout for single frame inference
+    )
+
+    if (!res.ok) {
+      throw new Error(`AI service returned HTTP ${res.status}`)
+    }
+
+    const json = await res.json()
+    return {
+      status: 'success',
+      timestamp: json.timestamp || new Date().toISOString(),
+      peopleCount: json.people_count ?? 1,
+      objectCount: json.object_count ?? 0,
+      boxes: json.boxes || [],
+      cameraQuality: {
+        score: json.camera_quality?.score ?? 0.88,
+        status: json.camera_quality?.status ?? 'healthy',
+        flags: json.camera_quality?.flags ?? [],
+        brightness: json.camera_quality?.brightness ?? 75,
+        blur_variance: json.camera_quality?.blur_variance ?? 110,
+      },
+      frameWidth: json.frame_width ?? 640,
+      frameHeight: json.frame_height ?? 480,
+      isFallback: false,
+    }
+  } catch (err: any) {
+    return createFallbackLiveFrameResult(centreId, batchId, expectedPresent, err.message)
+  }
+}
+
+function createFallbackLiveFrameResult(centreId: string, batchId: string, expectedPresent: number, reason: string): LiveFrameResult {
+  return {
+    status: 'fallback',
+    timestamp: new Date().toISOString(),
+    peopleCount: 1,
+    objectCount: 2,
+    boxes: [
+      {
+        track_id: 1,
+        confidence: 0.94,
+        class_name: 'person',
+        category: 'person',
+        class_id: 1,
+        box: [180, 70, 460, 420],
+      },
+      {
+        track_id: 101,
+        confidence: 0.88,
+        class_name: 'laptop',
+        category: 'object',
+        class_id: 63,
+        box: [220, 360, 420, 470],
+      },
+      {
+        track_id: 102,
+        confidence: 0.81,
+        class_name: 'chair',
+        category: 'object',
+        class_id: 56,
+        box: [160, 200, 480, 480],
+      },
+    ],
+    cameraQuality: {
+      score: 0.91,
+      status: 'healthy',
+      flags: [],
+      brightness: 78.4,
+      blur_variance: 142.0,
+    },
+    frameWidth: 640,
+    frameHeight: 480,
+    isFallback: true,
+    message: reason,
+  }
+}
+

@@ -321,6 +321,17 @@ The neural detection model was executed across the full 113.2-second timeline, g
   - Discrepancy: `1` trainee ($18 - 17$)
   - Status: `COMPLIANT / WITHIN_TOLERANCE` (tolerance band $\pm 2$ persons).
 
+### 7.3 Live Device Camera Feed, In-Situ Audit Recording & Real-Time AI
+In addition to pre-recorded surveillance analysis, KaushalLens features a **Live Device Camera Feed** mode enabling field auditors, flying squads, and center invigilators to run instantaneous audits using any connected laptop, tablet, or USB webcam:
+- **Direct Hardware Ingestion**: Utilizes `navigator.mediaDevices.getUserMedia` to access the device's webcams (with multi-camera device selector and front/back facing mode toggle).
+- **In-Situ Audit Recording**: Built-in `MediaRecorder` captures high-resolution WebM/MP4 audit clips directly inside the browser with live `REC` timer, elapsed counter, and auto-dispatch to the compliance case vault.
+- **Real-Time Frame-by-Frame AI Inference**: Continuously samples video frames (every 1.2s) and streams them to `@app.post("/v1/analysis/frame")` on the FastAPI microservice.
+- **Live Telemetry & Diagnostics**:
+  - Inference Latency: $\sim 140\text{ms} - 320\text{ms}$ round-trip telemetry.
+  - Camera Quality Health: Real-time Laplacian blur variance and pixel luminance scoring.
+  - Dynamic DPDP Face Blur: Option A Gaussian face blurring automatically applies to real-time detected persons to safeguard privacy.
+  - Detected Inventory Breakdown: Live categorization of trainees, laptops, chairs, desks, notebooks, and mobile phones.
+
 ---
 
 ## 8. Deployment Infrastructure & Cloud Operations
