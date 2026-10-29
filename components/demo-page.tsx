@@ -44,6 +44,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { ColabRunPackage } from '@/lib/types'
+import { webcamFaceTracker, type TrackedFace } from '@/lib/face-tracker'
 
 interface SampleVideoPreset {
   id: string
@@ -359,6 +360,7 @@ export function DemoPage() {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      webcamFaceTracker.reset()
       setMediaStream(stream)
       setIsLiveCameraActive(true)
 
@@ -428,6 +430,7 @@ export function DemoPage() {
       mediaStream.getTracks().forEach((track) => track.stop())
       setMediaStream(null)
     }
+    webcamFaceTracker.reset()
     setIsLiveCameraActive(false)
     setLiveLatencyMs(null)
     if (videoRef.current) {
@@ -566,6 +569,7 @@ export function DemoPage() {
 
               if (data.boxes && data.boxes.length > 0) {
                 const scaleX = vw / (data.frameWidth || targetW)
+                const scaleY = vh / (data.frameHeight || targetH)
                 const mappedBoxes = data.boxes.map((b: any, idx: number) => {
                   const bArr = Array.isArray(b.box) && b.box.length === 4 ? b.box : [b.x1 || 100, b.y1 || 100, b.x2 || 300, b.y2 || 300]
                   const x1 = bArr[0] * scaleX
@@ -1084,11 +1088,141 @@ export function DemoPage() {
             })
         }
 
-        // 1. DPDP Privacy Shield: Apply real-time Gaussian face blur and privacy shroud over every person
-        if (privacyBlur) {
+        // 1. Live Exact Face Tracking & Blur (when laptop camera is active)
+        let liveTrackedFace: TrackedFace | null = null
+        if (isLiveCameraActive) {
+          const personBox = boxesToDraw.find((b) => b.category === 'person')
+          liveTrackedFace = webcamFaceTracker.trackFace(
+            video,
+            personBox
+              ? {
+                  x1: personBox.x1,
+                  y1: personBox.y1,
+                  x2: personBox.x1 + personBox.w,
+                  y2: personBox.y1 + personBox.h,
+                }
+              : undefined
+          )
+        }
+
+        if (isLiveCameraActive && liveTrackedFace) {
+          const fx = liveTrackedFace.x
+          const fy = liveTrackedFace.y
+          const fw = liveTrackedFace.width
+          const fh = liveTrackedFace.height
+          const cx = liveTrackedFace.centerX
+          const cy = liveTrackedFace.centerY
+          const rx = fw / 2
+          const ry = fh / 2
+
+          if (privacyBlur) {
+            // Apply deep Gaussian blur strictly over the exact face ellipse
+            ctx.save()
+            ctx.beginPath()
+            ctx.ellipse(cx, cy, rx * 1.05, ry * 1.08, 0, 0, Math.PI * 2)
+            ctx.clip()
+
+            try {
+              ctx.filter = 'blur(22px)'
+              ctx.drawImage(
+                video,
+                fx - 15,
+                fy - 15,
+                fw + 30,
+                fh + 30,
+                fx - 15,
+                fy - 15,
+                fw + 30,
+                fh + 30
+              )
+            } catch {}
+
+            ctx.filter = 'none'
+
+            // Frosted privacy gradient veil
+            const grad = ctx.createRadialGradient(cx, cy, rx * 0.25, cx, cy, ry)
+            grad.addColorStop(0, 'rgba(15, 23, 42, 0.45)')
+            grad.addColorStop(1, 'rgba(30, 41, 59, 0.72)')
+            ctx.fillStyle = grad
+            ctx.fill()
+            ctx.restore()
+
+            // Glowing emerald privacy boundary ring
+            ctx.save()
+            ctx.beginPath()
+            ctx.ellipse(cx, cy, rx * 1.05, ry * 1.08, 0, 0, Math.PI * 2)
+            ctx.strokeStyle = 'rgba(52, 211, 153, 0.95)'
+            ctx.lineWidth = 2
+            ctx.shadowColor = 'rgba(16, 185, 129, 0.6)'
+            ctx.shadowBlur = 8
+            ctx.stroke()
+            ctx.restore()
+
+            // 4 high-tech corner brackets around the exact face bounds
+            ctx.save()
+            ctx.strokeStyle = '#34d399'
+            ctx.lineWidth = 2.5
+            const bLen = Math.min(16, fw * 0.22)
+            // Top-left
+            ctx.beginPath()
+            ctx.moveTo(fx, fy + bLen); ctx.lineTo(fx, fy); ctx.lineTo(fx + bLen, fy); ctx.stroke()
+            // Top-right
+            ctx.beginPath()
+            ctx.moveTo(fx + fw - bLen, fy); ctx.lineTo(fx + fw, fy); ctx.lineTo(fx + fw, fy + bLen); ctx.stroke()
+            // Bottom-left
+            ctx.beginPath()
+            ctx.moveTo(fx, fy + fh - bLen); ctx.lineTo(fx, fy + fh); ctx.lineTo(fx + bLen, fy + fh); ctx.stroke()
+            // Bottom-right
+            ctx.beginPath()
+            ctx.moveTo(fx + fw - bLen, fy + fh); ctx.lineTo(fx + fw, fy + fh); ctx.lineTo(fx + fw, fy + fh - bLen); ctx.stroke()
+            ctx.restore()
+
+            // Floating live telemetry badge above face
+            ctx.save()
+            ctx.font = 'bold 10px system-ui, -apple-system, sans-serif'
+            const tagText = `🛡️ EXACT FACE MASKED · ${Math.round(liveTrackedFace.confidence * 100)}%`
+            const tagMetrics = ctx.measureText(tagText)
+            const tw = tagMetrics.width + 12
+            const th = 16
+            const tx = cx - tw / 2
+            const ty = Math.max(8, fy - th - 6)
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.95)'
+            ctx.beginPath()
+            if (typeof ctx.roundRect === 'function') {
+              ctx.roundRect(tx, ty, tw, th, 4)
+            } else {
+              ctx.rect(tx, ty, tw, th)
+            }
+            ctx.fill()
+            ctx.strokeStyle = 'rgba(52, 211, 153, 0.85)'
+            ctx.lineWidth = 1
+            ctx.stroke()
+
+            ctx.fillStyle = '#34d399'
+            ctx.fillText(tagText, tx + 6, ty + 12)
+            ctx.restore()
+          } else {
+            // Unblurred mode: render exact face tracking reticle
+            ctx.save()
+            ctx.beginPath()
+            ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+            ctx.strokeStyle = '#38bdf8'
+            ctx.lineWidth = 2
+            ctx.stroke()
+
+            ctx.font = 'bold 10px system-ui, -apple-system, sans-serif'
+            const tag = `👤 EXACT FACE LOCKED (${Math.round(liveTrackedFace.confidence * 100)}%)`
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
+            ctx.fillRect(cx - 75, fy - 20, 150, 16)
+            ctx.fillStyle = '#38bdf8'
+            ctx.fillText(tag, cx - 70, fy - 8)
+            ctx.restore()
+          }
+        } else if (privacyBlur) {
+          // Standard pre-recorded surveillance video fallback: blur each person's head region
           boxesToDraw.forEach(({ x1, y1, w, h, category }) => {
             if (category === 'person') {
-              // The anatomical head/face is located in the upper ~32% of the human bounding box
               const faceW = Math.max(16, w * 0.65)
               const faceH = Math.max(16, h * 0.32)
               const faceX = Math.max(0, x1 + (w - faceW) / 2)
@@ -1104,12 +1238,10 @@ export function DemoPage() {
               ctx.clip()
 
               try {
-                // Live Gaussian blur on the underlying video frame
                 ctx.filter = 'blur(16px)'
                 ctx.drawImage(video, faceX, faceY, faceW, faceH, faceX, faceY, faceW, faceH)
               } catch {}
 
-              // Frosted glass privacy gradient overlay
               ctx.filter = 'none'
               const grad = ctx.createLinearGradient(faceX, faceY, faceX, faceY + faceH)
               grad.addColorStop(0, 'rgba(15, 23, 42, 0.65)')
@@ -1117,13 +1249,11 @@ export function DemoPage() {
               ctx.fillStyle = grad
               ctx.fillRect(faceX, faceY, faceW, faceH)
 
-              // Subtle emerald privacy ring
               ctx.strokeStyle = 'rgba(52, 211, 153, 0.85)'
               ctx.lineWidth = 1.5
               ctx.stroke()
               ctx.restore()
 
-              // Floating privacy badge above the blurred face
               ctx.save()
               ctx.font = 'bold 9px system-ui, -apple-system, sans-serif'
               const tagText = `🛡️ MASKED`
@@ -1156,7 +1286,12 @@ export function DemoPage() {
             ctx.clip()
           }
 
-          boxesToDraw.forEach(({ x1, y1, w, h, label, color }) => {
+          boxesToDraw.forEach(({ x1, y1, w, h, label, color, category }) => {
+            // On live camera, if exact face is already tracked & masked, avoid drawing duplicate person tag over face
+            if (isLiveCameraActive && category === 'person' && liveTrackedFace) {
+              return
+            }
+
             ctx.strokeStyle = color
             ctx.lineWidth = 2
             ctx.strokeRect(x1, y1, w, h)
@@ -1193,7 +1328,7 @@ export function DemoPage() {
 
     animId = requestAnimationFrame(renderOverlay)
     return () => cancelAnimationFrame(animId)
-  }, [viewMode, aiResult, detectionFilter, privacyBlur])
+  }, [viewMode, aiResult, detectionFilter, privacyBlur, isLiveCameraActive])
 
   const formatTimecode = (sec: number) => {
     const m = Math.floor(sec / 60)
@@ -1281,7 +1416,7 @@ export function DemoPage() {
                 {privacyBlur && (
                   <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/50 text-[10px] font-mono text-emerald-400">
                     <ShieldCheck size={11} />
-                    <span>DPDP FACE BLUR ACTIVE</span>
+                    <span>{isLiveCameraActive ? 'EXACT FACE TRACKING & BLUR ACTIVE' : 'DPDP FACE BLUR ACTIVE'}</span>
                   </span>
                 )}
               </div>
@@ -1770,7 +1905,7 @@ export function DemoPage() {
             {!isLiveCameraActive && (
               <div className="mt-2.5 flex flex-col gap-2.5">
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Open your laptop or device camera to stream classroom footage in real time. The AI continuously identifies trainees, desks, and equipment with DPDP Option A Gaussian face blurring.
+                  Open your laptop or device camera to stream live video in real time. The AI continuously tracks your exact face contour at 60 FPS and applies an immediate Gaussian blur shroud to completely protect your facial identity (DPDP Act compliance).
                 </p>
 
                 <button
@@ -1785,7 +1920,7 @@ export function DemoPage() {
                 <div className="flex items-center justify-between text-[11px] text-slate-500 px-1 pt-1 border-t border-slate-100">
                   <span className="flex items-center gap-1 text-emerald-600 font-medium">
                     <ShieldCheck size={11} />
-                    <span>DPDP Zero-PII Active</span>
+                    <span>Exact Face Blur Active</span>
                   </span>
                   <span className="flex items-center gap-1 text-sky-600 font-medium">
                     <Zap size={11} />
