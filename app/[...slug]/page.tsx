@@ -29,45 +29,35 @@ function ReconBadge({status}:{status:ReconciliationStatus}){ const Icon=reconIco
 function Badge({children}:{children:string}){ return <span className={`badge ${tone(children)}`}>{children}</span> }
 function Stat({label,value,sub,icon:Icon,tone='blue'}:{label:string;value:string|number;sub:string;icon:any;tone?:string}){ return <div className="stat"><div className={`stat-icon ${tone}`}><Icon size={17}/></div><div><div className="stat-label">{label}</div><div className="stat-value">{value}</div><div className="stat-sub">{sub}</div></div></div> }
 
-function LionCapitalEmblem({ size = 30 }: { size?: number }) {
+function LionCapitalEmblem({ size = 32, variant = 'white' }: { size?: number; variant?: 'white' | 'black' | 'gold' | 'badge' | 'raw' }) {
+  const src = variant === 'badge'
+    ? '/ashoka-stambh-badge.png'
+    : variant === 'black'
+    ? '/ashoka-stambh-black.png'
+    : variant === 'gold'
+    ? '/ashoka-stambh-gold.png'
+    : variant === 'raw'
+    ? '/ashoka-stambh-raw.png'
+    : '/ashoka-stambh-white.png';
+
   return (
-    <svg width={size} height={Math.round(size * 1.25)} viewBox="0 0 64 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="State Emblem of India">
-      {/* Central Lion Head */}
-      <path d="M25 13C25 7.5 28 5 32 5C36 5 39 7.5 39 13C39 15.5 40.5 17.5 42 18.5C41 22.5 37.5 25 32 25C26.5 25 23 22.5 22 18.5C23.5 17.5 25 15.5 25 13Z" fill="#F1F5F9" fillOpacity="0.95"/>
-      {/* Left Lion Head & Mane */}
-      <path d="M16 18C14.5 15 15.5 10 18.5 8C20.5 11 20.5 14 22.5 17C19.5 19 17.5 21 16 24C14.5 22 14.5 20 16 18Z" fill="#CBD5E1" fillOpacity="0.85"/>
-      {/* Right Lion Head & Mane */}
-      <path d="M48 18C49.5 15 48.5 10 45.5 8C43.5 11 43.5 14 41.5 17C44.5 19 46.5 21 48 24C49.5 22 49.5 20 48 18Z" fill="#CBD5E1" fillOpacity="0.85"/>
-      {/* Central Lion Eyes & Muzzle */}
-      <circle cx="29.5" cy="12.5" r="1.3" fill="#0F263A"/>
-      <circle cx="34.5" cy="12.5" r="1.3" fill="#0F263A"/>
-      <path d="M31 15.5L32 17L33 15.5" stroke="#0F263A" strokeWidth="0.8" strokeLinecap="round"/>
-      <path d="M29 19.5C30.5 21 33.5 21 35 19.5" stroke="#0F263A" strokeWidth="0.8" strokeLinecap="round"/>
-      {/* Lions Body & Main Mane */}
-      <path d="M18 24C16 29 17 35 20 39C22 42.5 25 45.5 28 47L28 52L36 52L36 47C39 45.5 42 42.5 44 39C47 35 48 29 46 24C44 26 42 27 39 27.5C37 28.5 35 29.5 32 29.5C29 29.5 27 28.5 25 27.5C22 27 20 26 18 24Z" fill="#E2E8F0" fillOpacity="0.95"/>
-      {/* Mane details */}
-      <path d="M24 31C26 34 29 37 32 37.5C35 37 38 34 40 31" stroke="#0F263A" strokeWidth="1" strokeLinecap="round" opacity="0.45"/>
-      <path d="M22 36C25 40 28 42 32 42.5C36 42 39 40 42 36" stroke="#0F263A" strokeWidth="1" strokeLinecap="round" opacity="0.45"/>
-      {/* Abacus frieze */}
-      <rect x="13" y="52" width="38" height="10" rx="1.5" fill="#F8FAFC" fillOpacity="0.95"/>
-      {/* Ashoka Chakra in center */}
-      <circle cx="32" cy="57" r="4.3" stroke="#0F263A" strokeWidth="1.1" fill="none"/>
-      <circle cx="32" cy="57" r="1.2" fill="#0F263A"/>
-      <line x1="32" y1="53" x2="32" y2="61" stroke="#0F263A" strokeWidth="0.7"/>
-      <line x1="28" y1="57" x2="36" y2="57" stroke="#0F263A" strokeWidth="0.7"/>
-      <line x1="29.2" y1="54.2" x2="34.8" y2="59.8" stroke="#0F263A" strokeWidth="0.7"/>
-      <line x1="29.2" y1="59.8" x2="34.8" y2="54.2" stroke="#0F263A" strokeWidth="0.7"/>
-      {/* Silhouettes on abacus */}
-      <circle cx="19" cy="57" r="1.8" fill="#0F263A" opacity="0.65"/>
-      <circle cx="45" cy="57" r="1.8" fill="#0F263A" opacity="0.65"/>
-      {/* Stepped Pedestal Base */}
-      <rect x="11" y="62" width="42" height="3" rx="0.5" fill="#CBD5E1"/>
-      <rect x="15" y="65" width="34" height="3" rx="0.5" fill="#94A3B8"/>
-      {/* Lotus Bell Pedestal Arch */}
-      <path d="M19 68C23 72 41 72 45 68" stroke="#E2E8F0" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
+    <img
+      src={src}
+      alt="State Emblem of India (Ashoka Stambh)"
+      width={size}
+      height={Math.round(size * 1.66)}
+      className="ashoka-stambh-img"
+      style={{
+        width: `${size}px`,
+        height: 'auto',
+        maxHeight: `${Math.round(size * 1.66)}px`,
+        objectFit: 'contain',
+        display: 'block',
+      }}
+    />
   );
 }
+
 
 function Shell({children,title,crumb,hideHeading}:{children:React.ReactNode;title:string;crumb?:string;hideHeading?:boolean}){
   const [open,setOpen] = useState(false);
@@ -104,15 +94,16 @@ function Shell({children,title,crumb,hideHeading}:{children:React.ReactNode;titl
           ))}
         </nav>
 
-        {/* Four Lion Statue & Ministry Name */}
+        {/* Ashoka Stambh Statue & Ministry of Skill Development and Entrepreneurship */}
         <div className="sidebar-emblem-section">
           <div className="emblem-card">
             <div className="emblem-graphic">
-              <LionCapitalEmblem size={28}/>
+              <LionCapitalEmblem size={34} variant="white" />
             </div>
             <div className="emblem-info">
               <b>Ministry of Skill Development and Entrepreneurship</b>
               <span>Government of India</span>
+              <small>सत्यमेव जयते</small>
             </div>
           </div>
         </div>
@@ -134,6 +125,15 @@ function Shell({children,title,crumb,hideHeading}:{children:React.ReactNode;titl
         <header>
           <button className="menu" onClick={() => setOpen(true)}><Menu size={20}/></button>
           <div className="crumb"><span>Kaushal Lens</span><ChevronRight size={14}/><b>{crumb || title}</b></div>
+          
+          <div className="header-ministry-chip">
+            <LionCapitalEmblem size={24} variant="black" />
+            <div className="header-ministry-title">
+              <b>Ministry of Skill Development and Entrepreneurship</b>
+              <span>Government of India · सत्यमेव जयते</span>
+            </div>
+          </div>
+
           <div className="header-actions">
             <div className="search"><Search size={16}/><input placeholder="Search centres, batches, or cases..."/></div>
             <button className="icon-btn" aria-label="Notifications"><Bell size={18}/><i/></button>
@@ -1574,7 +1574,7 @@ function ReconciliationList() {
 }
 function ReconciliationDetail({id}:{id:string}){const [r,setR]=useState<AttendanceReconciliation|null>(null);const [note,setNote]=useState('');const [submitting,setSubmitting]=useState(false);const [submitted,setSubmitted]=useState(false);useEffect(()=>{endpoints.reconciliation(id).then(setR as any)},[id]);if(!r)return <Shell title="Reconciliation review"><div className="loading">Loading reconciliation record...</div></Shell>;const diff=r.expectedPresent-r.observedMedian;const submit=async(decision:'CONFIRMED'|'DISMISSED')=>{if(!note.trim())return;setSubmitting(true);await endpoints.reviewReconciliation(r.id,{decision,note,reviewer:'Arjun Sharma'});setR({...r,status:decision==='CONFIRMED'?'CONFIRMED_BY_REVIEWER':'DISMISSED_BY_REVIEWER',reviewer:{name:'Arjun Sharma',decision,note,decidedAt:new Date().toISOString()}});setSubmitting(false);setSubmitted(true)};return <Shell title="Reconciliation review" crumb={`Reconciliation / ${r.id}`}><div className="case-title"><div><div className="eyebrow">{r.id} · {r.observedAt.slice(0,10)}</div><h2>Biometric-to-video reconciliation</h2><p className="muted">{r.centreName} · {r.roomName} · {r.batchName}</p></div><ReconBadge status={r.status}/></div><div className="case-layout"><div className="case-main"><section className="panel"><div className="section-label">BIOMETRIC vs VIDEO COMPARISON</div><div className="recon-comparison"><div className="recon-side bio"><Fingerprint size={22}/><span>Biometric expected</span><strong>{r.expectedPresent}</strong><small>{r.biometricCheckIns} check-ins · {r.biometricCheckOuts} check-outs</small></div><div className="recon-arrow"><span className={diff>3?'diff-alert':'diff-ok'}>{diff>0?`−${diff}`:diff===0?'0':`+${Math.abs(diff)}`}</span></div><div className="recon-side vid"><Video size={22}/><span>Video median observed</span><strong>{r.observedMedian}</strong><small>Aggregate occupancy · not individual identity</small></div></div></section><section className="panel"><div className="section-label">WHY THIS WAS FLAGGED</div><div className="reason"><CircleAlert size={17}/><div><b>Trigger reason</b><p>{r.reason}</p></div></div></section><section className="panel"><div className="section-label">EVIDENCE TIMELINE</div>{r.evidence.map((ev,i)=><div key={i} className="evidence-row"><div className="evidence-thumb"><div className="evidence-placeholder">{ev.type==='snapshot'?<Eye size={16}/>:<Video size={16}/>}</div></div><div><b>{ev.type==='snapshot'?'Camera snapshot':'Video clip'}</b><span className="muted"> · {ev.capturedAt.slice(11,16)}</span><small className="muted"> · Simulated evidence placeholder</small></div></div>)}<div className="privacy-banner" style={{marginTop:12}}><ShieldCheck size={14}/><div><p>Evidence shows aggregate occupancy only. No individual is identified from video.</p></div></div></section><section className="panel"><div className="section-label">DETECTION METRICS</div><div className="metrics-grid"><div className="metric"><span>Camera quality</span><strong>{Math.round(r.cameraQualityScore*100)}%</strong><div className="progress"><i style={{width:`${r.cameraQualityScore*100}%`,background:r.cameraQualityScore>0.7?'var(--teal)':'var(--amber)'}}/></div></div><div className="metric"><span>Detection confidence</span><strong>{Math.round(r.detectionConfidence*100)}%</strong><div className="progress"><i style={{width:`${r.detectionConfidence*100}%`,background:r.detectionConfidence>0.7?'var(--teal)':'var(--amber)'}}/></div></div><div className="metric"><span>Count stability</span><strong>{Math.round(r.countStability*100)}%</strong><div className="progress"><i style={{width:`${r.countStability*100}%`,background:r.countStability>0.7?'var(--teal)':'var(--amber)'}}/></div></div><div className="metric"><span>Occlusion risk</span><strong className={r.occlusionRisk==='high'?'score-low':''}>{r.occlusionRisk}</strong></div></div></section>{!r.reviewer&&!submitted&&<section className="panel"><div className="section-label">REVIEWER DECISION</div><p className="muted" style={{fontSize:11,marginBottom:12}}>A note is required for both actions. Confirmation flags for inspection — it does not issue a penalty.</p><textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Required: explain your reasoning for the audit trail..." aria-label="Review note"/><div className="panel-actions" style={{marginTop:10}}><Button variant="outline" size="sm" onClick={()=>submit('DISMISSED')} disabled={submitting||!note.trim()}><CheckCircle2 data-icon="inline-start"/> Dismiss / explain</Button><Button size="sm" onClick={()=>submit('CONFIRMED')} disabled={submitting||!note.trim()}><Send data-icon="inline-start"/> Confirm for inspection</Button></div></section>}{(r.reviewer||submitted)&&<section className="panel"><div className="section-label">REVIEWER DECISION RECORDED</div><div className="review-result"><div className={`signal ${r.reviewer?.decision==='CONFIRMED'?'red':'teal'}`}>{r.reviewer?.decision==='CONFIRMED'?<AlertTriangle size={15}/>:<CheckCircle2 size={15}/>}</div><div><b>{r.reviewer?.decision==='CONFIRMED'?'Confirmed for inspection':'Dismissed — no action required'}</b><p className="muted">{r.reviewer?.note}</p><small className="muted">By {r.reviewer?.name} · {r.reviewer?.decidedAt?.slice(0,16).replace('T',' ')}</small></div></div></section>}</div><aside className="case-aside"><section className="panel"><div className="section-label">RECORD DETAILS</div><dl><dt>Status</dt><dd><ReconBadge status={r.status}/></dd><dt>Centre</dt><dd>{r.centreName}</dd><dt>Batch</dt><dd>{r.batchName}</dd><dt>Room</dt><dd>{r.roomName}</dd><dt>State</dt><dd>{r.state}</dd><dt>District</dt><dd>{r.district}</dd><dt>Observed at</dt><dd>{r.observedAt.slice(0,16).replace('T',' ')}</dd></dl></section><section className="panel"><div className="section-label">AUDIT TRAIL</div><div className="timeline"><div><i className="timeline-dot teal"/><div><b>Record created</b><span>{r.observedAt.slice(0,16).replace('T',' ')}</span></div></div><div><i className="timeline-dot blue"/><div><b>Video analysis completed</b><span>Confidence {Math.round(r.detectionConfidence*100)}%</span></div></div>{r.reviewer&&<div><i className={`timeline-dot ${r.reviewer.decision==='CONFIRMED'?'amber':'teal'}`}/><div><b>{r.reviewer.decision==='CONFIRMED'?'Confirmed by reviewer':'Dismissed by reviewer'}</b><span>{r.reviewer.name} · {r.reviewer.decidedAt?.slice(0,16).replace('T',' ')}</span></div></div>}</div></section><section className="panel"><div className="privacy-banner" style={{border:0,padding:0,margin:0,background:'transparent'}}><ShieldCheck size={16}/><div><b>Privacy notice</b><p>This record contains no personally identifiable information. Video data shows aggregate occupancy only.</p></div></div></section></aside></div></Shell>}
 function BiometricDevicesPage(){const [devices,setDevices]=useState<BiometricDevice[]>([]);const [q,setQ]=useState('');useEffect(()=>{endpoints.biometricDevices().then(setDevices as any)},[]);const filtered=devices.filter(d=>(d.id+d.centreName+d.state+d.source).toLowerCase().includes(q.toLowerCase()));return <Shell title="Biometric device health" crumb="Biometric devices"><div className="privacy-banner"><ShieldCheck size={19}/><div><b>Privacy boundary</b><p>This page shows device metadata and sync status only. No biometric samples, Aadhaar data, fingerprint templates, or PID data is stored or displayed.</p></div></div><div className="toolbar"><div className="search wide"><Search size={16}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search device ID, centre or source"/></div></div><section className="panel"><div className="table-meta"><span><b>{filtered.length}</b> biometric devices in monitoring scope</span><span className="muted">Last sync check 3 minutes ago</span></div><table><thead><tr><th>Device ID</th><th>Centre</th><th>Source</th><th>Last sync</th><th>Delayed events</th><th>Offline events</th><th>Health</th></tr></thead><tbody>{filtered.map(d=><tr key={d.id}><td><b>{d.id}</b></td><td>{d.centreName}<small>{d.district}, {d.state}</small></td><td><span className="role-pill">{d.source}</span></td><td>{d.lastSuccessfulSync.slice(0,16).replace('T',' ')}</td><td>{d.delayedEvents||'—'}</td><td>{d.offlineEvents||'—'}</td><td><span className={`badge ${d.health==='healthy'?'teal':d.health==='delayed'?'amber':'red'}`}>{d.health==='healthy'?<Wifi size={11}/>:d.health==='delayed'?<Clock size={11}/>:<WifiOff size={11}/>} {d.health}</span></td></tr>)}</tbody></table></section></Shell>}
-function Login(){const [role,setRole]=useState('National Admin'); const positions=['National Admin','Secretary / Mission Director','Additional Secretary','State Monitoring Officer','District Inspector','Centre Operator','Auditor']; return <div className="login"><div className="login-card"><div className="brand centered"><div className="brand-mark"><ShieldCheck size={24}/></div><div><b>Kaushal Lens</b><span>AI-Powered Skill Centre Monitoring</span></div></div><div className="eyebrow">MINISTRY WORKSPACE</div><h1>Evidence-led oversight for every training centre.</h1><p className="muted">Sign in to a role-scoped workspace for attendance, infrastructure and camera compliance.</p><label>Operational position<select value={role} onChange={e=>setRole(e.target.value)}>{positions.map(x=><option key={x}>{x}</option>)}</select></label><Button className="login-btn" onClick={()=>location.href=`/demo?role=${encodeURIComponent(role)}`}>Enter workspace <ChevronRight data-icon="inline-end"/></Button><div className="login-note"><ShieldCheck size={14}/> Privacy boundary: aggregate presence only · No facial recognition</div></div></div>}
+function Login(){const [role,setRole]=useState('National Admin'); const positions=['National Admin','Secretary / Mission Director','Additional Secretary','State Monitoring Officer','District Inspector','Centre Operator','Auditor']; return <div className="login"><div className="login-card"><div className="login-emblem-badge" style={{display:'flex',alignItems:'center',gap:14,marginBottom:22,padding:'12px 16px',background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:10,boxShadow:'0 2px 6px rgba(0,0,0,0.04)'}}><LionCapitalEmblem size={34} variant="black"/><div><div style={{fontSize:12,fontWeight:700,color:'#0f263a',lineHeight:1.25}}>Ministry of Skill Development and Entrepreneurship</div><div style={{fontSize:10,color:'#64748b',fontWeight:600,marginTop:2}}>Government of India · सत्यमेव जयते</div></div></div><div className="brand centered"><div className="brand-mark"><ShieldCheck size={24}/></div><div><b>Kaushal Lens</b><span>AI-Powered Skill Centre Monitoring</span></div></div><div className="eyebrow">MINISTRY WORKSPACE</div><h1>Evidence-led oversight for every training centre.</h1><p className="muted">Sign in to a role-scoped workspace for attendance, infrastructure and camera compliance.</p><label>Operational position<select value={role} onChange={e=>setRole(e.target.value)}>{positions.map(x=><option key={x}>{x}</option>)}</select></label><Button className="login-btn" onClick={()=>location.href=`/demo?role=${encodeURIComponent(role)}`}>Enter workspace <ChevronRight data-icon="inline-end"/></Button><div className="login-note"><ShieldCheck size={14}/> Privacy boundary: aggregate presence only · No facial recognition</div></div></div>}
 export default function RoutePage(){
   const pathname=usePathname();
   const path=pathname.split('/').filter(Boolean);

@@ -32,7 +32,7 @@
 @media(max-width:760px){.recon-comparison{flex-direction:column;gap:10px}.metrics-grid{grid-template-columns:repeat(2,1fr)}}
 
 /* ═══════════════════════════════════════════════════════════════
-   FOUR LION STATUE (ASHOKA LION CAPITAL) & MINISTRY FOOTER
+   ASHOKA STAMBH STATUE & MINISTRY OF SKILL DEVELOPMENT & ENTREPRENEURSHIP
    ═══════════════════════════════════════════════════════════════ */
 .sidebar-emblem-section {
   padding: 14px 14px 10px;
@@ -42,24 +42,30 @@
 .emblem-card {
   display: flex;
   align-items: center;
-  gap: 11px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 9px;
   padding: 10px 12px;
   transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 .emblem-card:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 .emblem-graphic {
-  color: #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+.emblem-graphic .ashoka-stambh-img {
+  width: 32px;
+  height: auto;
+  max-height: 52px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.65)) drop-shadow(0 0 1px rgba(255, 255, 255, 0.35));
 }
 .emblem-info {
   display: flex;
@@ -82,11 +88,59 @@
 }
 .emblem-info small {
   font-size: 9px;
-  color: var(--saffron);
+  color: #f59e0b;
   font-weight: 700;
-  letter-spacing: 0.6px;
-  margin-top: 1px;
+  letter-spacing: 0.8px;
+  margin-top: 2px;
 }
+
+/* Header Ministry Chip with Ashoka Stambh */
+.header-ministry-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, rgba(18, 48, 74, 0.05), rgba(18, 48, 74, 0.02));
+  border: 1px solid rgba(18, 48, 74, 0.12);
+  border-radius: 8px;
+  padding: 5px 14px 5px 10px;
+  margin: 0 auto 0 24px;
+  transition: all 0.2s ease;
+}
+.header-ministry-chip:hover {
+  background: rgba(18, 48, 74, 0.08);
+  border-color: rgba(18, 48, 74, 0.2);
+}
+.header-emblem-img {
+  width: 22px;
+  height: auto;
+  max-height: 36px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+  flex-shrink: 0;
+}
+.header-ministry-title {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.header-ministry-title b {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: -0.15px;
+}
+.header-ministry-title span {
+  font-size: 9.5px;
+  color: #64748b;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+@media (max-width: 1024px) {
+  .header-ministry-chip {
+    display: none;
+  }
+}
+
 
 /* Collapsible sidebar integration for Emblem */
 .nav-collapsed .sidebar .sidebar-emblem-section {
