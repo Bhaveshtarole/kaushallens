@@ -188,6 +188,8 @@ export function DemoPage() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('')
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user')
   const [liveQualityStatus, setLiveQualityStatus] = useState<string>('healthy')
+  const [liveDetectedPeople, setLiveDetectedPeople] = useState<number>(1)
+  const liveDetectedPeopleRef = useRef<number>(1)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
@@ -570,24 +572,28 @@ export function DemoPage() {
               if (data.boxes && data.boxes.length > 0) {
                 const scaleX = vw / (data.frameWidth || targetW)
                 const scaleY = vh / (data.frameHeight || targetH)
-                const mappedBoxes = data.boxes.map((b: any, idx: number) => {
-                  const bArr = Array.isArray(b.box) && b.box.length === 4 ? b.box : [b.x1 || 100, b.y1 || 100, b.x2 || 300, b.y2 || 300]
-                  const x1 = bArr[0] * scaleX
-                  const y1 = bArr[1] * scaleY
-                  const x2 = bArr[2] * scaleX
-                  const y2 = bArr[3] * scaleY
-                  return {
-                    track_id: b.track_id || idx + 1,
-                    confidence: b.confidence ?? 0.88,
-                    class_name: b.class_name || 'person',
-                    category: b.category || (b.class_name === 'person' ? 'person' : 'object'),
-                    box: [x1, y1, x2, y2],
-                    x1,
-                    y1,
-                    x2,
-                    y2,
-                  }
-                })
+                const mappedBoxes = data.boxes
+                  .filter((b: any) => b.category === 'person' || b.class_name === 'person')
+                  .map((b: any, idx: number) => {
+                    const bArr = Array.isArray(b.box) && b.box.length === 4 ? b.box : [b.x1 || 100, b.y1 || 100, b.x2 || 300, b.y2 || 300]
+                    const x1 = bArr[0] * scaleX
+                    const y1 = bArr[1] * scaleY
+                    const x2 = bArr[2] * scaleX
+                    const y2 = bArr[3] * scaleY
+                    return {
+                      track_id: b.track_id || idx + 1,
+                      confidence: b.confidence ?? 0.88,
+                      class_name: 'person',
+                      category: 'person' as const,
+                      box: [x1, y1, x2, y2],
+                      x1,
+                      y1,
+                      x2,
+                      y2,
+                    }
+                  })
+
+                const livePeople = mappedBoxes.length > 0 ? mappedBoxes.length : liveDetectedPeopleRef.current
 
                 setAiResult({
                   video: {
@@ -596,16 +602,16 @@ export function DemoPage() {
                   },
                   summary: {
                     expected_present: expectedPresent,
-                    observed_median: data.peopleCount ?? mappedBoxes.filter((bx: any) => bx.category === 'person').length,
-                    observed_mean: data.peopleCount,
+                    observed_median: livePeople,
+                    observed_mean: livePeople,
                     sample_count: 1,
                     camera_quality_score: data.cameraQuality?.score ?? 0.9,
                   },
                   samples: [
                     {
                       time_seconds: 0,
-                      visible_tracked_people: data.peopleCount ?? mappedBoxes.filter((bx: any) => bx.category === 'person').length,
-                      visible_tracked_objects: data.objectCount ?? mappedBoxes.filter((bx: any) => bx.category === 'object').length,
+                      visible_tracked_people: livePeople,
+                      visible_tracked_objects: 0,
                       boxes: mappedBoxes,
                     },
                   ],
@@ -730,13 +736,17 @@ export function DemoPage() {
       )
     : null
 
-  const activeTrackedCount = currentSample
-    ? currentSample.visible_tracked_people
-    : (aiResult?.summary?.observed_median !== undefined
-        ? Math.round(aiResult.summary.observed_median)
-        : (selectedPreset.observedOccupancy ?? 8))
+  const activeTrackedCount = isLiveCameraActive
+    ? liveDetectedPeople
+    : (currentSample
+        ? currentSample.visible_tracked_people
+        : (aiResult?.summary?.observed_median !== undefined
+            ? Math.round(aiResult.summary.observed_median)
+            : (selectedPreset.observedOccupancy ?? 8)))
 
-  const activeObjectCount = currentSample?.visible_tracked_objects ?? (currentSample?.boxes ? currentSample.boxes.filter(b => b.category === 'object').length : 11)
+  const activeObjectCount = isLiveCameraActive
+    ? 0
+    : (currentSample?.visible_tracked_objects ?? (currentSample?.boxes ? currentSample.boxes.filter(b => b.category === 'object').length : 11))
 
   const observedOccupancy = aiResult?.summary?.observed_median !== undefined
     ? Math.round(aiResult.summary.observed_median)
@@ -1034,8 +1044,8 @@ export function DemoPage() {
             })
         }
 
-        // Fallback to rich classroom layout if no AI sample boxes are present yet
-        if (boxesToDraw.length === 0) {
+        // Fallback to rich classroom layout if no AI sample boxes are present yet (only for pre-recorded CCTV footage)
+        if (boxesToDraw.length === 0 && !isLiveCameraActive) {
           const studentBoxes: Array<[number, number, number, number, number, string, 'person' | 'object', string]> = [
             [240, 25, 335, 115, 0.89, 'person #1', 'person', '#06b6d4'],
             [355, 65, 430, 155, 0.92, 'person #2', 'person', '#06b6d4'],
@@ -1088,138 +1098,134 @@ export function DemoPage() {
             })
         }
 
-        // 1. Live Exact Face Tracking & Blur (when laptop camera is active)
-        let liveTrackedFace: TrackedFace | null = null
+        // 1. Live Exact Multi-Face Tracking & Gaussian Blur (when laptop camera is active)
+        let liveTrackedFaces: TrackedFace[] = []
         if (isLiveCameraActive) {
-          const personBox = boxesToDraw.find((b) => b.category === 'person')
-          liveTrackedFace = webcamFaceTracker.trackFace(
-            video,
-            personBox
-              ? {
-                  x1: personBox.x1,
-                  y1: personBox.y1,
-                  x2: personBox.x1 + personBox.w,
-                  y2: personBox.y1 + personBox.h,
-                }
-              : undefined
-          )
+          liveTrackedFaces = webcamFaceTracker.trackFaces(video)
+          const newCount = Math.max(1, liveTrackedFaces.length)
+          if (liveDetectedPeopleRef.current !== newCount) {
+            liveDetectedPeopleRef.current = newCount
+            setLiveDetectedPeople(newCount)
+          }
         }
 
-        if (isLiveCameraActive && liveTrackedFace) {
-          const fx = liveTrackedFace.x
-          const fy = liveTrackedFace.y
-          const fw = liveTrackedFace.width
-          const fh = liveTrackedFace.height
-          const cx = liveTrackedFace.centerX
-          const cy = liveTrackedFace.centerY
-          const rx = fw / 2
-          const ry = fh / 2
+        if (isLiveCameraActive && liveTrackedFaces.length > 0) {
+          liveTrackedFaces.forEach((face) => {
+            const fx = face.x
+            const fy = face.y
+            const fw = face.width
+            const fh = face.height
+            const cx = face.centerX
+            const cy = face.centerY
+            const rx = face.radiusX || fw / 2
+            const ry = face.radiusY || fh / 2
 
-          if (privacyBlur) {
-            // Apply deep Gaussian blur strictly over the exact face ellipse
-            ctx.save()
-            ctx.beginPath()
-            ctx.ellipse(cx, cy, rx * 1.05, ry * 1.08, 0, 0, Math.PI * 2)
-            ctx.clip()
+            if (privacyBlur) {
+              // Apply deep Gaussian blur strictly over each person's exact face ellipse
+              ctx.save()
+              ctx.beginPath()
+              ctx.ellipse(cx, cy, rx * 1.05, ry * 1.08, 0, 0, Math.PI * 2)
+              ctx.clip()
 
-            try {
-              ctx.filter = 'blur(22px)'
-              ctx.drawImage(
-                video,
-                fx - 15,
-                fy - 15,
-                fw + 30,
-                fh + 30,
-                fx - 15,
-                fy - 15,
-                fw + 30,
-                fh + 30
-              )
-            } catch {}
+              try {
+                ctx.filter = 'blur(22px)'
+                ctx.drawImage(
+                  video,
+                  fx - 15,
+                  fy - 15,
+                  fw + 30,
+                  fh + 30,
+                  fx - 15,
+                  fy - 15,
+                  fw + 30,
+                  fh + 30
+                )
+              } catch {}
 
-            ctx.filter = 'none'
+              ctx.filter = 'none'
 
-            // Frosted privacy gradient veil
-            const grad = ctx.createRadialGradient(cx, cy, rx * 0.25, cx, cy, ry)
-            grad.addColorStop(0, 'rgba(15, 23, 42, 0.45)')
-            grad.addColorStop(1, 'rgba(30, 41, 59, 0.72)')
-            ctx.fillStyle = grad
-            ctx.fill()
-            ctx.restore()
+              // Frosted privacy gradient veil
+              const grad = ctx.createRadialGradient(cx, cy, rx * 0.25, cx, cy, ry)
+              grad.addColorStop(0, 'rgba(15, 23, 42, 0.45)')
+              grad.addColorStop(1, 'rgba(30, 41, 59, 0.72)')
+              ctx.fillStyle = grad
+              ctx.fill()
+              ctx.restore()
 
-            // Glowing emerald privacy boundary ring
-            ctx.save()
-            ctx.beginPath()
-            ctx.ellipse(cx, cy, rx * 1.05, ry * 1.08, 0, 0, Math.PI * 2)
-            ctx.strokeStyle = 'rgba(52, 211, 153, 0.95)'
-            ctx.lineWidth = 2
-            ctx.shadowColor = 'rgba(16, 185, 129, 0.6)'
-            ctx.shadowBlur = 8
-            ctx.stroke()
-            ctx.restore()
+              // Glowing emerald privacy boundary ring
+              ctx.save()
+              ctx.beginPath()
+              ctx.ellipse(cx, cy, rx * 1.05, ry * 1.08, 0, 0, Math.PI * 2)
+              ctx.strokeStyle = 'rgba(52, 211, 153, 0.95)'
+              ctx.lineWidth = 2
+              ctx.shadowColor = 'rgba(16, 185, 129, 0.6)'
+              ctx.shadowBlur = 8
+              ctx.stroke()
+              ctx.restore()
 
-            // 4 high-tech corner brackets around the exact face bounds
-            ctx.save()
-            ctx.strokeStyle = '#34d399'
-            ctx.lineWidth = 2.5
-            const bLen = Math.min(16, fw * 0.22)
-            // Top-left
-            ctx.beginPath()
-            ctx.moveTo(fx, fy + bLen); ctx.lineTo(fx, fy); ctx.lineTo(fx + bLen, fy); ctx.stroke()
-            // Top-right
-            ctx.beginPath()
-            ctx.moveTo(fx + fw - bLen, fy); ctx.lineTo(fx + fw, fy); ctx.lineTo(fx + fw, fy + bLen); ctx.stroke()
-            // Bottom-left
-            ctx.beginPath()
-            ctx.moveTo(fx, fy + fh - bLen); ctx.lineTo(fx, fy + fh); ctx.lineTo(fx + bLen, fy + fh); ctx.stroke()
-            // Bottom-right
-            ctx.beginPath()
-            ctx.moveTo(fx + fw - bLen, fy + fh); ctx.lineTo(fx + fw, fy + fh); ctx.lineTo(fx + fw, fy + fh - bLen); ctx.stroke()
-            ctx.restore()
+              // 4 high-tech corner brackets around the exact face bounds
+              ctx.save()
+              ctx.strokeStyle = '#34d399'
+              ctx.lineWidth = 2.5
+              const bLen = Math.min(16, fw * 0.22)
+              // Top-left
+              ctx.beginPath()
+              ctx.moveTo(fx, fy + bLen); ctx.lineTo(fx, fy); ctx.lineTo(fx + bLen, fy); ctx.stroke()
+              // Top-right
+              ctx.beginPath()
+              ctx.moveTo(fx + fw - bLen, fy); ctx.lineTo(fx + fw, fy); ctx.lineTo(fx + fw, fy + bLen); ctx.stroke()
+              // Bottom-left
+              ctx.beginPath()
+              ctx.moveTo(fx, fy + fh - bLen); ctx.lineTo(fx, fy + fh); ctx.lineTo(fx + bLen, fy + fh); ctx.stroke()
+              // Bottom-right
+              ctx.beginPath()
+              ctx.moveTo(fx + fw - bLen, fy + fh); ctx.lineTo(fx + fw, fy + fh); ctx.lineTo(fx + fw, fy + fh - bLen); ctx.stroke()
+              ctx.restore()
 
-            // Floating live telemetry badge above face
-            ctx.save()
-            ctx.font = 'bold 10px system-ui, -apple-system, sans-serif'
-            const tagText = `🛡️ EXACT FACE MASKED · ${Math.round(liveTrackedFace.confidence * 100)}%`
-            const tagMetrics = ctx.measureText(tagText)
-            const tw = tagMetrics.width + 12
-            const th = 16
-            const tx = cx - tw / 2
-            const ty = Math.max(8, fy - th - 6)
+              // Floating live telemetry badge above face
+              ctx.save()
+              ctx.font = 'bold 10px system-ui, -apple-system, sans-serif'
+              const tagText = `🛡️ EXACT FACE MASKED #${face.id} · ${Math.round(face.confidence * 100)}%`
+              const tagMetrics = ctx.measureText(tagText)
+              const tw = tagMetrics.width + 12
+              const th = 16
+              const tx = cx - tw / 2
+              const ty = Math.max(8, fy - th - 6)
 
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.95)'
-            ctx.beginPath()
-            if (typeof ctx.roundRect === 'function') {
-              ctx.roundRect(tx, ty, tw, th, 4)
+              ctx.fillStyle = 'rgba(15, 23, 42, 0.95)'
+              ctx.beginPath()
+              if (typeof ctx.roundRect === 'function') {
+                ctx.roundRect(tx, ty, tw, th, 4)
+              } else {
+                ctx.rect(tx, ty, tw, th)
+              }
+              ctx.fill()
+              ctx.strokeStyle = 'rgba(52, 211, 153, 0.85)'
+              ctx.lineWidth = 1
+              ctx.stroke()
+
+              ctx.fillStyle = '#34d399'
+              ctx.fillText(tagText, tx + 6, ty + 12)
+              ctx.restore()
             } else {
-              ctx.rect(tx, ty, tw, th)
+              // Unblurred mode: render exact face tracking reticle
+              ctx.save()
+              ctx.beginPath()
+              ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+              ctx.strokeStyle = '#38bdf8'
+              ctx.lineWidth = 2
+              ctx.stroke()
+
+              ctx.font = 'bold 10px system-ui, -apple-system, sans-serif'
+              const tag = `👤 EXACT FACE LOCKED #${face.id} (${Math.round(face.confidence * 100)}%)`
+              ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
+              ctx.fillRect(cx - 75, fy - 20, 150, 16)
+              ctx.fillStyle = '#38bdf8'
+              ctx.fillText(tag, cx - 70, fy - 8)
+              ctx.restore()
             }
-            ctx.fill()
-            ctx.strokeStyle = 'rgba(52, 211, 153, 0.85)'
-            ctx.lineWidth = 1
-            ctx.stroke()
-
-            ctx.fillStyle = '#34d399'
-            ctx.fillText(tagText, tx + 6, ty + 12)
-            ctx.restore()
-          } else {
-            // Unblurred mode: render exact face tracking reticle
-            ctx.save()
-            ctx.beginPath()
-            ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
-            ctx.strokeStyle = '#38bdf8'
-            ctx.lineWidth = 2
-            ctx.stroke()
-
-            ctx.font = 'bold 10px system-ui, -apple-system, sans-serif'
-            const tag = `👤 EXACT FACE LOCKED (${Math.round(liveTrackedFace.confidence * 100)}%)`
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
-            ctx.fillRect(cx - 75, fy - 20, 150, 16)
-            ctx.fillStyle = '#38bdf8'
-            ctx.fillText(tag, cx - 70, fy - 8)
-            ctx.restore()
-          }
-        } else if (privacyBlur) {
+          })
+        } else if (privacyBlur && !isLiveCameraActive) {
           // Standard pre-recorded surveillance video fallback: blur each person's head region
           boxesToDraw.forEach(({ x1, y1, w, h, category }) => {
             if (category === 'person') {
@@ -1276,7 +1282,7 @@ export function DemoPage() {
           })
         }
 
-        // 2. Draw standard detection bounding boxes and color tags (if in AI or Split view mode)
+        // 2. Draw detection bounding boxes and color tags (if in AI or Split view mode)
         if (viewMode === 'ai' || viewMode === 'split') {
           ctx.save()
           if (viewMode === 'split') {
@@ -1286,28 +1292,49 @@ export function DemoPage() {
             ctx.clip()
           }
 
-          boxesToDraw.forEach(({ x1, y1, w, h, label, color, category }) => {
-            // On live camera, if exact face is already tracked & masked, avoid drawing duplicate person tag over face
-            if (isLiveCameraActive && category === 'person' && liveTrackedFace) {
-              return
-            }
+          if (isLiveCameraActive) {
+            // On live camera, draw real tracked person boxes for each detected individual
+            liveTrackedFaces.forEach((face) => {
+              const pb = face.personBox
+              const pw = Math.max(20, pb.x2 - pb.x1)
+              const ph = Math.max(30, pb.y2 - pb.y1)
 
-            ctx.strokeStyle = color
-            ctx.lineWidth = 2
-            ctx.strokeRect(x1, y1, w, h)
+              ctx.strokeStyle = '#06b6d4'
+              ctx.lineWidth = 2
+              ctx.strokeRect(pb.x1, pb.y1, pw, ph)
 
-            // Color tag label
-            ctx.font = 'bold 11px system-ui, -apple-system, sans-serif'
-            const metrics = ctx.measureText(label)
-            const tagW = metrics.width + 10
-            const tagH = 17
+              // Color tag label
+              ctx.font = 'bold 11px system-ui, -apple-system, sans-serif'
+              const pLabel = `Trainee #${face.id} ${face.confidence.toFixed(2)}`
+              const metrics = ctx.measureText(pLabel)
+              const tagW = metrics.width + 10
+              const tagH = 17
 
-            ctx.fillStyle = color
-            ctx.fillRect(x1, Math.max(0, y1 - tagH), tagW, tagH)
+              ctx.fillStyle = '#06b6d4'
+              ctx.fillRect(pb.x1, Math.max(0, pb.y1 - tagH), tagW, tagH)
 
-            ctx.fillStyle = '#ffffff'
-            ctx.fillText(label, x1 + 5, Math.max(12, y1 - 4))
-          })
+              ctx.fillStyle = '#ffffff'
+              ctx.fillText(pLabel, pb.x1 + 5, Math.max(12, pb.y1 - 4))
+            })
+          } else {
+            boxesToDraw.forEach(({ x1, y1, w, h, label, color }) => {
+              ctx.strokeStyle = color
+              ctx.lineWidth = 2
+              ctx.strokeRect(x1, y1, w, h)
+
+              // Color tag label
+              ctx.font = 'bold 11px system-ui, -apple-system, sans-serif'
+              const metrics = ctx.measureText(label)
+              const tagW = metrics.width + 10
+              const tagH = 17
+
+              ctx.fillStyle = color
+              ctx.fillRect(x1, Math.max(0, y1 - tagH), tagW, tagH)
+
+              ctx.fillStyle = '#ffffff'
+              ctx.fillText(label, x1 + 5, Math.max(12, y1 - 4))
+            })
+          }
 
           ctx.restore()
 
